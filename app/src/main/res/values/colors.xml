@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="brand">#365F54</color>
+    <color name="import_panel">#294A42</color>
+    <color name="app_background">#F4F1E9</color>
+    <color name="reader_paper">#FAF7EE</color>
+    <color name="reader_controls">#EEE8DA</color>
+    <color name="reader_text">#292A27</color>
+    <color name="reading_highlight">#FFE67E22</color>
+    <color name="secondary_text">#6D706A</color>
+    <color name="shelf_outline">#D4CDBE</color>
+</resources>

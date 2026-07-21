@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="book-id">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <dc:identifier id="book-id">urn:uuid:bln-reader-test</dc:identifier>
+        <dc:title>听读功能测试书</dc:title>
+        <dc:creator>Codex 测试</dc:creator>
+        <dc:language>zh-CN</dc:language>
+    </metadata>
+    <manifest>
+        <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml" />
+        <item id="chapter2" href="chapter2.xhtml" media-type="application/xhtml+xml" />
+    </manifest>
+    <spine>
+        <itemref idref="chapter1" />
+        <itemref idref="chapter2" />
+    </spine>
+</package>

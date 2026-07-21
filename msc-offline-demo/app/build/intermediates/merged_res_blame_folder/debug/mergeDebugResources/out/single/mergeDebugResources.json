@@ -1,0 +1,198 @@
+[
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_superman.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/superman.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-ldpi_icon.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-ldpi/icon.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_btn_right_f.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/btn_right_f.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_isrdemo.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/isrdemo.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_ok.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/ok.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_btn_left.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/btn_left.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_btn_left_f.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/btn_left_f.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_mic_1.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/mic_1.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_editbox.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/editbox.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable_main_setting_btn_np.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable/main_setting_btn_np.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_login_p.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/login_p.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/xml_iat_setting.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/xml/iat_setting.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_login.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/login.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_pane_bg.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/pane_bg.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_mic_2.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/mic_2.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_ivw_activity.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/ivw_activity.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_btn_right_n.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/btn_right_n.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_btn_right_p.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/btn_right_p.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/xml_understand_setting.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/xml/understand_setting.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_head.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/head.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-mdpi_icon.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-mdpi/icon.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_wake_activity.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/wake_activity.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_ok_p.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/ok_p.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable_ok_button.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable/ok_button.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable_cancel_button.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable/cancel_button.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_edittext_name.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/edittext_name.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_oneshot_activity.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/oneshot_activity.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_mic_3.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/mic_3.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_bg.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/bg.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_name_right.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/name_right.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable_setting.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable/setting.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_icon.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/icon.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_name_left.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/name_left.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_button_login.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/button_login.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_btn_left_p.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/btn_left_p.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_btn_left_n.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/btn_left_n.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable_setting_p.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable/setting_p.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_iatdemo.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/iatdemo.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_ok_d.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/ok_d.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_cancel.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/cancel.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_ttsdemo.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/ttsdemo.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_mic_0.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/mic_0.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_btn_right.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/btn_right.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/xml_tts_setting.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/xml/tts_setting.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable-hdpi_cancel_p.9.png.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable-hdpi/cancel_p.9.png"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_list_items.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/list_items.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_main.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/main.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/drawable_list_bg_color.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/drawable/list_bg_color.xml"
+    },
+    {
+        "merged": "com.iflytek.mscv5plusdemo.app-debug-32:/layout_title.xml.flat",
+        "source": "com.iflytek.mscv5plusdemo.app-main-34:/layout/title.xml"
+    }
+]
