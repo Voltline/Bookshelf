@@ -6,6 +6,12 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A100000130106621008753A2 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = A100000430106621008753A2 /* ReadiumShared */; };
+		A100000230106621008753A2 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = A100000530106621008753A2 /* ReadiumStreamer */; };
+		A100000630106621008753A2 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = A100000730106621008753A2 /* ReadiumNavigator */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		B254863030106621008753A2 /* BookShelf.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BookShelf.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -22,6 +28,9 @@
 		B254862D30106621008753A2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				A100000130106621008753A2 /* ReadiumShared in Frameworks */,
+				A100000230106621008753A2 /* ReadiumStreamer in Frameworks */,
+				A100000630106621008753A2 /* ReadiumNavigator in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -60,6 +69,11 @@
 				B254863230106621008753A2 /* BookShelf */,
 			);
 			name = BookShelf;
+			packageProductDependencies = (
+				A100000430106621008753A2 /* ReadiumShared */,
+				A100000530106621008753A2 /* ReadiumStreamer */,
+				A100000730106621008753A2 /* ReadiumNavigator */,
+			);
 			productName = BookShelf;
 			productReference = B254863030106621008753A2 /* BookShelf.app */;
 			productType = "com.apple.product-type.application";
@@ -88,6 +102,9 @@
 			);
 			mainGroup = B254862730106621008753A2;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B254863130106621008753A2 /* Products */;
 			projectDirPath = "";
@@ -251,6 +268,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -290,6 +308,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -334,6 +353,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/readium/swift-toolkit.git";
+			requirement = {
+				kind = exactVersion;
+				version = 3.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A100000430106621008753A2 /* ReadiumShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumShared;
+		};
+		A100000530106621008753A2 /* ReadiumStreamer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumStreamer;
+		};
+		A100000730106621008753A2 /* ReadiumNavigator */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumNavigator;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B254862830106621008753A2 /* Project object */;
 	validationLevel = 1;
