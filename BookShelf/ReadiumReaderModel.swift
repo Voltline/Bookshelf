@@ -4,6 +4,7 @@ import Foundation
 @preconcurrency import ReadiumNavigator
 import ReadiumShared
 import UIKit
+import WebKit
 
 @MainActor
 final class ReadiumReaderModel: NSObject, ObservableObject {
@@ -23,7 +24,9 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     private let store: LibraryStore
     private var speechSynthesizer: PublicationSpeechSynthesizer?
     private var navigationAdapter: DirectionalNavigationAdapter?
+    private var verticalScrollNavigationAdapter: VerticalScrollNavigationAdapter?
     private var speechSettings = SpeechSettings()
+    private var positionCountsByReadingOrder: [Int] = []
     private var highlightedUtterance: Locator?
     private var lastSpeechNavigationAt = Date.distantPast
     private var isSpeechNavigating = false
@@ -33,7 +36,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         self.store = store
     }
 
-    func load(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme, speechSettings: SpeechSettings) async {
+    func load(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme, font: ReadingFont, speechSettings: SpeechSettings) async {
         guard navigator == nil else { return }
         isLoading = true
         self.speechSettings = speechSettings
@@ -41,16 +44,21 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
             let publication = try await store.publication(for: book)
             let savedLocation = try book.locator.locatorJSON.flatMap { try Locator(jsonString: $0) }
             let initialLocation = validatedInitialLocation(savedLocation, in: publication)
-            let preferences = makePreferences(fontSize: fontSize, lineSpacing: lineSpacing, mode: mode, theme: theme)
+            let preferences = makePreferences(fontSize: fontSize, lineSpacing: lineSpacing, mode: mode, theme: theme, font: font)
             let navigator = try EPUBNavigatorViewController(
                 publication: publication,
                 initialLocation: initialLocation,
-                config: .init(preferences: preferences)
+                config: .init(
+                    preferences: preferences,
+                    disablePageTurnsWhileScrolling: true
+                )
             )
             navigator.delegate = self
 
             let adapter = DirectionalNavigationAdapter(animatedTransition: true)
             adapter.bind(to: navigator)
+            let verticalScrollAdapter = VerticalScrollNavigationAdapter(navigator: navigator)
+            verticalScrollAdapter.bind()
             navigator.addObserver(.activate { [weak self] _ in
                 self?.controlsVisible.toggle()
                 return true
@@ -59,7 +67,13 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
             self.publication = publication
             self.navigator = navigator
             navigationAdapter = adapter
+            verticalScrollNavigationAdapter = verticalScrollAdapter
             tableOfContents = flatten((try? await publication.tableOfContents().get()) ?? [])
+            positionCountsByReadingOrder = ((try? await publication.positionsByReadingOrder().get()) ?? []).map(\.count)
+            totalPositions = positionCountsByReadingOrder.reduce(0, +)
+            if let location = navigator.currentLocation ?? initialLocation {
+                updateReadingProgress(from: location)
+            }
             speechSynthesizer = PublicationSpeechSynthesizer(
                 publication: publication,
                 config: .init(
@@ -75,8 +89,8 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         isLoading = false
     }
 
-    func applyPreferences(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme) {
-        navigator?.submitPreferences(makePreferences(fontSize: fontSize, lineSpacing: lineSpacing, mode: mode, theme: theme))
+    func applyPreferences(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme, font: ReadingFont) {
+        navigator?.submitPreferences(makePreferences(fontSize: fontSize, lineSpacing: lineSpacing, mode: mode, theme: theme, font: font))
     }
 
     func goForward() {
@@ -125,9 +139,9 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         updateSpeechHighlight(nil)
     }
 
-    private func makePreferences(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme) -> EPUBPreferences {
+    private func makePreferences(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme, font: ReadingFont) -> EPUBPreferences {
         EPUBPreferences(
-            fontFamily: .serif,
+            fontFamily: ReaderFonts.family(for: font),
             fontSize: max(0.7, min(2.0, fontSize / 20.0)),
             lineHeight: max(1.1, min(2.2, 1.25 + lineSpacing / 20.0)),
             publisherStyles: true,
@@ -204,17 +218,229 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
             self.isSpeechNavigating = false
         }
     }
+
+    private func updateReadingProgress(from locator: Locator, persist: Bool = true) {
+        let fallbackProgress = min(1, max(0, locator.locations.totalProgression ?? progression))
+        var resolvedProgress = fallbackProgress
+        var resolvedPosition = locator.locations.position
+
+        if
+            totalPositions > 0,
+            let publication,
+            let resourceIndex = publication.readingOrder.firstIndex(where: { $0.url().isEquivalentTo(locator.href) }),
+            positionCountsByReadingOrder.indices.contains(resourceIndex)
+        {
+            let positionsBeforeResource = positionCountsByReadingOrder[..<resourceIndex].reduce(0, +)
+            let positionsInResource = positionCountsByReadingOrder[resourceIndex]
+
+            if positionsInResource > 0 {
+                let inferredResourceProgress = resolvedPosition.map {
+                    Double(max(0, $0 - positionsBeforeResource - 1)) / Double(positionsInResource)
+                }
+                let resourceProgress = min(1, max(0, locator.locations.progression ?? inferredResourceProgress ?? 0))
+                resolvedProgress = min(
+                    1,
+                    max(0, (Double(positionsBeforeResource) + resourceProgress * Double(positionsInResource)) / Double(totalPositions))
+                )
+                let localPosition = min(positionsInResource - 1, Int(floor(resourceProgress * Double(positionsInResource))))
+                resolvedPosition = positionsBeforeResource + localPosition + 1
+            }
+        }
+
+        if totalPositions > 0 {
+            resolvedPosition = min(totalPositions, max(1, resolvedPosition ?? Int((resolvedProgress * Double(totalPositions - 1)).rounded()) + 1))
+        } else {
+            resolvedPosition = max(1, resolvedPosition ?? 1)
+        }
+
+        progression = resolvedProgress
+        position = resolvedPosition ?? 1
+
+        if persist {
+            store.updateLocation(
+                bookID: book.id,
+                locatorJSON: locator.jsonString,
+                position: position,
+                total: totalPositions
+            )
+        }
+    }
+}
+
+/// Readium scrolls continuously inside one spine item, but its built-in
+/// cross-chapter gesture is horizontal. This adapter keeps scroll mode
+/// vertical by turning to the adjacent spine item when the user swipes again
+/// at the top or bottom edge of the current item.
+@MainActor
+private final class VerticalScrollNavigationAdapter: NSObject, UIGestureRecognizerDelegate {
+    private enum Direction {
+        case backward, forward
+    }
+
+    private weak var navigator: EPUBNavigatorViewController?
+    private lazy var panGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+    private var pendingDirection: Direction?
+    private var isNavigating = false
+
+    init(navigator: EPUBNavigatorViewController) {
+        self.navigator = navigator
+    }
+
+    func bind() {
+        guard let view = navigator?.view else { return }
+        panGesture.delegate = self
+        panGesture.cancelsTouchesInView = false
+        view.addGestureRecognizer(panGesture)
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        pendingDirection = nil
+        guard
+            !isNavigating,
+            let navigator,
+            navigator.presentation.scroll,
+            let scrollView = activeWebScrollView(in: navigator),
+            let pan = gestureRecognizer as? UIPanGestureRecognizer
+        else { return false }
+
+        let velocity = pan.velocity(in: navigator.view)
+        guard abs(velocity.y) > abs(velocity.x) * 1.15 else { return false }
+
+        let inset = scrollView.adjustedContentInset
+        let minimumY = -inset.top
+        let maximumY = max(minimumY, scrollView.contentSize.height - scrollView.bounds.height + inset.bottom)
+        let tolerance = 2.0
+
+        if velocity.y < 0, scrollView.contentOffset.y >= maximumY - tolerance {
+            pendingDirection = .forward
+            return true
+        }
+        if velocity.y > 0, scrollView.contentOffset.y <= minimumY + tolerance {
+            pendingDirection = .backward
+            return true
+        }
+        return false
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        guard gesture.state == .ended, let direction = pendingDirection, let navigator else {
+            if gesture.state == .cancelled || gesture.state == .failed {
+                pendingDirection = nil
+            }
+            return
+        }
+        pendingDirection = nil
+
+        let translationY = gesture.translation(in: navigator.view).y
+        let velocityY = gesture.velocity(in: navigator.view).y
+        let shouldNavigate: Bool = {
+            switch direction {
+            case .forward: translationY < -44 || velocityY < -550
+            case .backward: translationY > 44 || velocityY > 550
+            }
+        }()
+        guard shouldNavigate else { return }
+
+        isNavigating = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.isNavigating = false }
+            guard let navigator = self.navigator else { return }
+            switch direction {
+            case .forward:
+                _ = await navigator.goForward(options: .animated)
+            case .backward:
+                _ = await navigator.goBackward(options: .animated)
+            }
+        }
+    }
+
+    private func activeWebScrollView(in navigator: EPUBNavigatorViewController) -> UIScrollView? {
+        let viewport = navigator.view.bounds
+        return navigator.view
+            .descendants(of: WKWebView.self)
+            .map { webView in
+                (scrollView: webView.scrollView, visibleArea: webView.convert(webView.bounds, to: navigator.view).intersection(viewport).area)
+            }
+            .filter { $0.visibleArea > 1 }
+            .max { $0.visibleArea < $1.visibleArea }?
+            .scrollView
+    }
+}
+
+private extension UIView {
+    func descendants<T: UIView>(of type: T.Type) -> [T] {
+        subviews.flatMap { view in
+            (view as? T).map { [$0] } ?? view.descendants(of: type)
+        }
+    }
+}
+
+private extension CGRect {
+    var area: CGFloat {
+        isNull || isEmpty ? 0 : width * height
+    }
 }
 
 extension ReadiumReaderModel: EPUBNavigatorDelegate {
+    func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
+        // Readium intentionally preserves author fonts on elements carrying a
+        // language attribute. Many CJK EPUBs wrap every sentence in such
+        // spans, which makes the standard font preference appear ineffective.
+        // Keep Readium's CSS variable as the source of truth, but extend the
+        // override to normal text elements regardless of their lang attribute.
+        let source = #"""
+        (() => {
+          if (document.getElementById("bookshelf-font-override")) return;
+          const style = document.createElement("style");
+          style.id = "bookshelf-font-override";
+          style.textContent = `
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] {
+              font-family: var(--USER__fontFamily) !important;
+            }
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] body,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] p,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] li,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] div,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] blockquote,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] h1,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] h2,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] h3,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] h4,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] h5,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] h6,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] span,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] a,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] em,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] strong,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] ruby,
+            :root[style*="readium-font-on"][style*="--USER__fontFamily"] rt {
+              font-family: var(--USER__fontFamily) !important;
+            }
+          `;
+          (document.head || document.documentElement).appendChild(style);
+        })();
+        """#
+        userContentController.addUserScript(WKUserScript(
+            source: source,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        ))
+    }
+
     func navigator(_ navigator: EPUBNavigatorViewController, viewportDidChange viewport: EPUBNavigatorViewController.Viewport?) {
         isNavigatorReady = viewport != nil
     }
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
-        progression = locator.locations.totalProgression ?? progression
-        position = locator.locations.position ?? max(1, Int(progression * Double(max(1, totalPositions))))
-        store.updateLocation(bookID: book.id, locatorJSON: locator.jsonString, position: position, total: totalPositions)
+        updateReadingProgress(from: locator)
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {

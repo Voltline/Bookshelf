@@ -9,6 +9,7 @@ struct ReaderView: View {
     @AppStorage("reader.lineSpacing") private var lineSpacing = 8.0
     @AppStorage("reader.theme") private var theme = ReadingTheme.paper.rawValue
     @AppStorage("reader.mode") private var mode = ReadingMode.page.rawValue
+    @AppStorage("reader.font") private var font = ReadingFont.publisher.rawValue
     @AppStorage(SpeechSettingKeys.language) private var speechLanguage = "zh-CN"
     @AppStorage(SpeechSettingKeys.voiceIdentifier) private var speechVoiceIdentifier = ""
     @AppStorage(SpeechSettingKeys.rate) private var speechRate = 0.5
@@ -20,6 +21,7 @@ struct ReaderView: View {
     @State private var showChapters = false
     @State private var showSettings = false
     @State private var sliderProgress = 0.0
+    @State private var isScrubbingProgress = false
 
     init(book: Book, library: LibraryStore) {
         _model = StateObject(wrappedValue: ReadiumReaderModel(book: book, store: library))
@@ -27,6 +29,18 @@ struct ReaderView: View {
 
     private var readingTheme: ReadingTheme { ReadingTheme(rawValue: theme) ?? .paper }
     private var readingMode: ReadingMode { ReadingMode(rawValue: mode) ?? .page }
+    private var readingFont: ReadingFont { ReadingFont(rawValue: font) ?? .publisher }
+
+    private func applyReadingPreferences() {
+        model.applyPreferences(
+            fontSize: fontSize,
+            lineSpacing: lineSpacing,
+            mode: readingMode,
+            theme: readingTheme,
+            font: readingFont
+        )
+    }
+
     private var speechSettings: SpeechSettings {
         SpeechSettings(
             languageCode: speechLanguage,
@@ -91,19 +105,28 @@ struct ReaderView: View {
         .statusBarHidden(!model.controlsVisible)
         .animation(.easeInOut(duration: 0.18), value: model.controlsVisible)
         .task {
+            if !ReaderFonts.available.contains(readingFont) {
+                font = (ReaderFonts.available.contains(.serif) ? ReadingFont.serif : .sansSerif).rawValue
+            }
             await model.load(
                 fontSize: fontSize,
                 lineSpacing: lineSpacing,
                 mode: readingMode,
                 theme: readingTheme,
+                font: readingFont,
                 speechSettings: speechSettings
             )
         }
-        .onChange(of: model.progression) { _, value in sliderProgress = value }
+        .onChange(of: model.progression) { _, value in
+            if !isScrubbingProgress {
+                sliderProgress = value
+            }
+        }
         .onDisappear { model.stopSpeech() }
+        .onChange(of: font) { _, _ in applyReadingPreferences() }
         .sheet(isPresented: $showChapters) { chapterSheet }
         .sheet(isPresented: $showSettings, onDismiss: {
-            model.applyPreferences(fontSize: fontSize, lineSpacing: lineSpacing, mode: readingMode, theme: readingTheme)
+            applyReadingPreferences()
         }) { settingsSheet }
         .alert("阅读错误", isPresented: Binding(get: { model.errorMessage != nil && !model.isLoading }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("好", role: .cancel) {}
@@ -128,13 +151,18 @@ struct ReaderView: View {
         VStack(spacing: 12) {
             readerGlassProgressSurface {
                 HStack(spacing: 12) {
-                    Text(model.totalPositions > 0 ? "\(model.position)" : "\(Int(model.progression * 100))%")
-                        .frame(minWidth: 28, alignment: .leading)
+                    Text("\(Int((model.progression * 100).rounded()))%")
+                        .frame(minWidth: 36, alignment: .leading)
                     Slider(value: $sliderProgress, in: 0...1) { editing in
-                        if !editing { model.go(to: sliderProgress) }
+                        isScrubbingProgress = editing
+                        if !editing {
+                            model.go(to: sliderProgress)
+                        }
                     }
-                    Text(model.totalPositions > 0 ? "\(model.totalPositions)" : "\(Int(model.progression * 100))%")
-                        .frame(minWidth: 28, alignment: .trailing)
+                    .accessibilityLabel("阅读进度")
+                    .accessibilityValue("百分之 \(Int((sliderProgress * 100).rounded()))")
+                    Text(model.totalPositions > 0 ? "\(model.position)/\(model.totalPositions)" : "100%")
+                        .frame(minWidth: 44, alignment: .trailing)
                 }
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
@@ -236,6 +264,7 @@ struct ReaderView: View {
                 }
                 Section("显示") {
                     Picker("主题", selection: $theme) { ForEach(ReadingTheme.allCases) { Text($0.name).tag($0.rawValue) } }
+                    Picker("字体", selection: $font) { ForEach(ReaderFonts.available) { Text(ReaderFonts.name(for: $0)).tag($0.rawValue) } }
                     LabeledContent("字号", value: "\(Int(fontSize))")
                     Slider(value: $fontSize, in: 15...30, step: 1)
                     LabeledContent("行距", value: "\(Int(lineSpacing))")

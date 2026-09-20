@@ -13,8 +13,16 @@ struct BookShelfApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--font-regression") {
+                FontRegressionProbe()
+            } else {
+                ContentView().environmentObject(library)
+            }
+            #else
             ContentView()
                 .environmentObject(library)
+            #endif
         }
     }
 }

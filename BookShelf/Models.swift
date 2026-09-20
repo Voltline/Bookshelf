@@ -39,6 +39,22 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     var name: String { self == .page ? "左右翻页" : "上下滚动" }
 }
 
+enum ReadingFont: String, CaseIterable, Identifiable {
+    case publisher, sansSerif, serif, kai, monospace
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .publisher: "原书字体"
+        case .sansSerif: "系统黑体"
+        case .serif: "系统衬线字体"
+        case .kai: "系统楷体"
+        case .monospace: "等宽字体（西文）"
+        }
+    }
+}
+
 enum SpeechSettingKeys {
     static let language = "speech.language"
     static let voiceIdentifier = "speech.voiceIdentifier"
