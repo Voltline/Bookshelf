@@ -14,7 +14,9 @@ struct BookShelfApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG && targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("--font-regression") {
+            if ProcessInfo.processInfo.arguments.contains("--kokoro-regression") {
+                KokoroRegressionProbe()
+            } else if ProcessInfo.processInfo.arguments.contains("--font-regression") {
                 FontRegressionProbe()
             } else {
                 ContentView().environmentObject(library)

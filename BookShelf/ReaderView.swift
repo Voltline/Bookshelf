@@ -11,6 +11,9 @@ struct ReaderView: View {
     @AppStorage("reader.mode") private var mode = ReadingMode.page.rawValue
     @AppStorage("reader.font") private var font = ReadingFont.publisher.rawValue
     @AppStorage(SpeechSettingKeys.language) private var speechLanguage = "zh-CN"
+    @AppStorage(SpeechSettingKeys.engine) private var speechEngine = SpeechEngine.system.rawValue
+    @AppStorage(SpeechSettingKeys.kokoroVoice) private var kokoroVoice = 3
+    @AppStorage(SpeechSettingKeys.kokoroSpeed) private var kokoroSpeed = 1.0
     @AppStorage(SpeechSettingKeys.voiceIdentifier) private var speechVoiceIdentifier = ""
     @AppStorage(SpeechSettingKeys.rate) private var speechRate = 0.5
     @AppStorage(SpeechSettingKeys.pitch) private var speechPitch = 1.0
@@ -50,7 +53,10 @@ struct ReaderView: View {
             volume: speechVolume,
             sentencePause: speechSentencePause,
             highlightEnabled: speechHighlightEnabled,
-            autoPageTurnEnabled: speechAutoPageTurnEnabled
+            autoPageTurnEnabled: speechAutoPageTurnEnabled,
+            engine: SpeechEngine(rawValue: speechEngine) ?? .system,
+            kokoroVoice: kokoroVoice,
+            kokoroSpeed: kokoroSpeed
         )
     }
 

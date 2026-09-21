@@ -78,9 +78,12 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
                 publication: publication,
                 config: .init(
                     defaultLanguage: Language(code: .bcp47(speechSettings.languageCode)),
-                    voiceIdentifier: speechSettings.voiceIdentifier.isEmpty ? nil : speechSettings.voiceIdentifier
+                    voiceIdentifier: speechSettings.engine == .kokoro ? "kokoro.\(speechSettings.kokoroVoice)" : (speechSettings.voiceIdentifier.isEmpty ? nil : speechSettings.voiceIdentifier)
                 ),
-                engineFactory: { [weak self] in AVTTSEngine(delegate: self) },
+                engineFactory: { [weak self] in
+                    if speechSettings.engine == .kokoro { return KokoroTTSEngine(settings: speechSettings) }
+                    return AVTTSEngine(delegate: self)
+                },
                 delegate: self
             )
         } catch {
@@ -122,6 +125,10 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     }
 
     func toggleSpeech() {
+        if speechSettings.engine == .kokoro && !KokoroModel.isInstalled {
+            errorMessage = "请先到书架 → 设置下载 Kokoro 模型，或将朗读引擎切回系统朗读。"
+            return
+        }
         guard let synthesizer = speechSynthesizer else { return }
         switch synthesizer.state {
         case .stopped:
@@ -136,6 +143,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
 
     func stopSpeech() {
         speechSynthesizer?.stop()
+        if speechSettings.engine == .kokoro { Task { await KokoroWorker.shared.unload() } }
         updateSpeechHighlight(nil)
     }
 

@@ -10,6 +10,7 @@
 		A100000130106621008753A2 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = A100000430106621008753A2 /* ReadiumShared */; };
 		A100000230106621008753A2 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = A100000530106621008753A2 /* ReadiumStreamer */; };
 		A100000630106621008753A2 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = A100000730106621008753A2 /* ReadiumNavigator */; };
+		C200000130106621008753A2 /* sherpa-onnx in Frameworks */ = {isa = PBXBuildFile; productRef = C200000230106621008753A2 /* sherpa-onnx */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 		B254862D30106621008753A2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				C200000130106621008753A2 /* sherpa-onnx in Frameworks */,
 				A100000130106621008753A2 /* ReadiumShared in Frameworks */,
 				A100000230106621008753A2 /* ReadiumStreamer in Frameworks */,
 				A100000630106621008753A2 /* ReadiumNavigator in Frameworks */,
@@ -70,6 +72,7 @@
 			);
 			name = BookShelf;
 			packageProductDependencies = (
+				C200000230106621008753A2 /* sherpa-onnx */,
 				A100000430106621008753A2 /* ReadiumShared */,
 				A100000530106621008753A2 /* ReadiumStreamer */,
 				A100000730106621008753A2 /* ReadiumNavigator */,
@@ -103,6 +106,7 @@
 			mainGroup = B254862730106621008753A2;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				C200000330106621008753A2 /* XCRemoteSwiftPackageReference "sherpa-onnx" */,
 				A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -363,6 +367,14 @@
 				version = 3.8.0;
 			};
 		};
+		C200000330106621008753A2 /* XCRemoteSwiftPackageReference "sherpa-onnx" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/k2-fsa/sherpa-onnx.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.13.8;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -380,6 +392,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
 			productName = ReadiumNavigator;
+		};
+		C200000230106621008753A2 /* sherpa-onnx */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C200000330106621008753A2 /* XCRemoteSwiftPackageReference "sherpa-onnx" */;
+			productName = "sherpa-onnx";
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
