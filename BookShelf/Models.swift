@@ -48,17 +48,14 @@ enum ReadingFont: String, CaseIterable, Identifiable {
         switch self {
         case .publisher: "原书字体"
         case .sansSerif: "系统黑体"
-        case .serif: "系统衬线字体"
-        case .kai: "系统楷体"
+        case .serif: "思源宋体"
+        case .kai: "霞鹜文楷"
         case .monospace: "等宽字体（西文）"
         }
     }
 }
 
 enum SpeechSettingKeys {
-    static let engine = "speech.engine"
-    static let kokoroVoice = "speech.kokoroVoice"
-    static let kokoroSpeed = "speech.kokoroSpeed"
     static let language = "speech.language"
     static let voiceIdentifier = "speech.voiceIdentifier"
     static let rate = "speech.rate"
@@ -78,12 +75,4 @@ struct SpeechSettings: Equatable {
     var sentencePause = 0.0
     var highlightEnabled = true
     var autoPageTurnEnabled = true
-    var engine = SpeechEngine.system
-    var kokoroVoice = 3
-    var kokoroSpeed = 1.0
-}
-
-enum SpeechEngine: String, CaseIterable {
-    case system, kokoro
-    var name: String { self == .system ? "系统朗读" : "Kokoro 离线朗读" }
 }

@@ -14,7 +14,10 @@ final class LibraryStore: ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init() { loadIndex() }
+    init() {
+        removeLegacyKokoroData()
+        loadIndex()
+    }
 
     func importBook(from sourceURL: URL) async -> Book? {
         isImporting = true
@@ -85,6 +88,18 @@ final class LibraryStore: ObservableObject {
     private var booksDirectory: URL { applicationSupport.appendingPathComponent("Books", isDirectory: true) }
     private var coversDirectory: URL { applicationSupport.appendingPathComponent("Covers", isDirectory: true) }
     private var indexURL: URL { applicationSupport.appendingPathComponent("library.json") }
+
+    /// Kokoro was removed from the app. Clear its large downloaded model and
+    /// obsolete preferences once the updated app is launched.
+    private func removeLegacyKokoroData() {
+        let modelDirectory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Kokoro-v1.1-int8", isDirectory: true)
+        if fileManager.fileExists(atPath: modelDirectory.path) {
+            try? fileManager.removeItem(at: modelDirectory)
+        }
+        let defaults = UserDefaults.standard
+        ["speech.engine", "speech.kokoroVoice", "speech.kokoroSpeed"].forEach(defaults.removeObject(forKey:))
+    }
 
     private func ensureDirectories() throws {
         try fileManager.createDirectory(at: booksDirectory, withIntermediateDirectories: true)

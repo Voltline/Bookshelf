@@ -27,7 +27,7 @@ struct FontRegressionProbe: View {
                     try await Task.sleep(for: .milliseconds(200))
                 }
                 guard reader.isNavigatorReady else { throw NSError(domain: "Navigator did not become ready", code: 3) }
-                func webViews(_ view: UIView) -> [WKWebView] {
+                @MainActor func webViews(_ view: UIView) -> [WKWebView] {
                     if let web = view as? WKWebView { return [web] }
                     return view.subviews.flatMap(webViews)
                 }
@@ -60,9 +60,14 @@ struct FontRegressionProbe: View {
                     }
                 }
                 guard samples.count == 2, samples.values.allSatisfy({
-                    $0.count == 6 && $0[0] == $0[1] && $0[1] != $0[2] && $0[0] == $0[5]
+                    $0.count == 6 &&
+                        $0[0] == $0[1] &&
+                        $0[1] != $0[2] &&
+                        $0[2] != $0[3] &&
+                        $0[1] != $0[3] &&
+                        $0[0] == $0[5]
                 }) else { throw NSError(domain: "CJK font change/restoration regression", code: 4) }
-                results.append("PASS: both chapters change CJK glyphs and restore publisher fonts")
+                results.append("PASS: both chapters render distinct Noto Serif and WenKai glyphs, then restore publisher fonts")
             } catch { results.append("ERROR: \(error)") }
             try? results.joined(separator: "\n").write(to: URL.documentsDirectory.appendingPathComponent("font-results.txt"), atomically: true, encoding: .utf8)
         }

@@ -11,9 +11,6 @@ struct ReaderView: View {
     @AppStorage("reader.mode") private var mode = ReadingMode.page.rawValue
     @AppStorage("reader.font") private var font = ReadingFont.publisher.rawValue
     @AppStorage(SpeechSettingKeys.language) private var speechLanguage = "zh-CN"
-    @AppStorage(SpeechSettingKeys.engine) private var speechEngine = SpeechEngine.system.rawValue
-    @AppStorage(SpeechSettingKeys.kokoroVoice) private var kokoroVoice = 3
-    @AppStorage(SpeechSettingKeys.kokoroSpeed) private var kokoroSpeed = 1.0
     @AppStorage(SpeechSettingKeys.voiceIdentifier) private var speechVoiceIdentifier = ""
     @AppStorage(SpeechSettingKeys.rate) private var speechRate = 0.5
     @AppStorage(SpeechSettingKeys.pitch) private var speechPitch = 1.0
@@ -53,10 +50,7 @@ struct ReaderView: View {
             volume: speechVolume,
             sentencePause: speechSentencePause,
             highlightEnabled: speechHighlightEnabled,
-            autoPageTurnEnabled: speechAutoPageTurnEnabled,
-            engine: SpeechEngine(rawValue: speechEngine) ?? .system,
-            kokoroVoice: kokoroVoice,
-            kokoroSpeed: kokoroSpeed
+            autoPageTurnEnabled: speechAutoPageTurnEnabled
         )
     }
 
@@ -178,22 +172,24 @@ struct ReaderView: View {
             .frame(maxWidth: .infinity, alignment: .center)
 
             readerGlassButtonGroup {
-                HStack(spacing: 36) {
+                HStack(spacing: 28) {
                     readerGlassButton(action: { model.goBackward() }) {
                         Image(systemName: "backward.end.fill")
+                            .font(.system(size: 18, weight: .semibold))
                     }
                     .disabled(!model.isNavigatorReady)
                     readerGlassButton(prominent: true, action: { model.toggleSpeech() }) {
-                        Image(systemName: model.isSpeaking ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 44))
+                        Image(systemName: model.isSpeaking ? "pause.fill" : "play.fill")
+                            .font(.system(size: 24, weight: .semibold))
+                            .offset(x: model.isSpeaking ? 0 : 1)
                     }
                     .accessibilityLabel(model.isSpeaking ? "暂停朗读" : "开始朗读")
                     readerGlassButton(action: { model.goForward() }) {
                         Image(systemName: "forward.end.fill")
+                            .font(.system(size: 18, weight: .semibold))
                     }
                     .disabled(!model.isNavigatorReady)
                 }
-                .font(.title3)
             }
             .frame(maxWidth: .infinity, alignment: .center)
         }
@@ -232,20 +228,43 @@ struct ReaderView: View {
         action: @escaping () -> Void,
         @ViewBuilder label: () -> Label
     ) -> some View {
+        let buttonSize: CGFloat = prominent ? 62 : 52
+        let labelSize: CGFloat = prominent ? 38 : 32
+
         if #available(iOS 26.0, *) {
             if prominent {
-                Button(action: action, label: label)
+                Button(action: action) {
+                    label()
+                        .frame(width: labelSize, height: labelSize)
+                }
                     .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
+                    .frame(width: buttonSize, height: buttonSize)
             } else {
-                Button(action: action, label: label)
+                Button(action: action) {
+                    label()
+                        .frame(width: labelSize, height: labelSize)
+                }
                     .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .frame(width: buttonSize, height: buttonSize)
             }
         } else if prominent {
-            Button(action: action, label: label)
+            Button(action: action) {
+                label()
+                    .frame(width: labelSize, height: labelSize)
+            }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.circle)
+                .frame(width: buttonSize, height: buttonSize)
         } else {
-            Button(action: action, label: label)
+            Button(action: action) {
+                label()
+                    .frame(width: labelSize, height: labelSize)
+            }
                 .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .frame(width: buttonSize, height: buttonSize)
         }
     }
 

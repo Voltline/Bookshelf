@@ -1,37 +1,64 @@
+import Foundation
 import ReadiumNavigator
-import UIKit
+import ReadiumShared
 
-/// Do not assume that macOS or downloadable CJK fonts are installed on iOS.
+/// Fonts served by Readium to each EPUB web view. Merely registering the fonts
+/// with UIKit is not enough for publication resources loaded by WKWebView.
 enum ReaderFonts {
-    private static func installed(_ names: [String]) -> String? {
-        names.first { !UIFont.fontNames(forFamilyName: $0).isEmpty }
-    }
+    private static let notoSerif = FontFamily(rawValue: "Bookshelf Noto Serif SC")
+    private static let wenKai = FontFamily(rawValue: "Bookshelf WenKai Lite")
 
-    static var available: [ReadingFont] {
-        ReadingFont.allCases.filter {
-            switch $0 {
-            case .serif: installed(["Songti SC", "Songti TC", "Hiragino Mincho ProN"]) != nil
-            case .kai: installed(["Kaiti SC", "Kaiti TC"]) != nil
-            default: true
-            }
-        }
-    }
+    static let available = ReadingFont.allCases
 
     static func name(for font: ReadingFont) -> String {
-        switch font {
-        case .serif: installed(["Songti SC", "Songti TC"]) != nil ? "系统宋体" : "系统明朝体"
-        case .kai: "系统楷体"
-        default: font.name
-        }
+        font.name
     }
 
     static func family(for font: ReadingFont) -> FontFamily? {
         switch font {
         case .publisher: nil
         case .sansSerif: FontFamily(rawValue: "PingFang SC")
-        case .serif: FontFamily(rawValue: installed(["Songti SC", "Songti TC", "Hiragino Mincho ProN"]) ?? "serif")
-        case .kai: installed(["Kaiti SC", "Kaiti TC"]).map(FontFamily.init(rawValue:)) ?? family(for: .serif)
+        case .serif: notoSerif
+        case .kai: wenKai
         case .monospace: .monospace
         }
+    }
+
+    static func declarations(bundle: Bundle = .main) -> [AnyHTMLFontFamilyDeclaration] {
+        [
+            declaration(
+                family: notoSerif,
+                resource: "NotoSerifCJKsc-Regular",
+                extension: "otf",
+                alternates: [FontFamily(rawValue: "Hiragino Mincho ProN"), .serif],
+                bundle: bundle
+            ),
+            declaration(
+                family: wenKai,
+                resource: "LXGWWenKaiLite-Regular",
+                extension: "ttf",
+                alternates: [FontFamily(rawValue: "PingFang SC"), .sansSerif],
+                bundle: bundle
+            ),
+        ].compactMap { $0 }
+    }
+
+    private static func declaration(
+        family: FontFamily,
+        resource: String,
+        extension fileExtension: String,
+        alternates: [FontFamily],
+        bundle: Bundle
+    ) -> AnyHTMLFontFamilyDeclaration? {
+        guard let url = bundle.url(forResource: resource, withExtension: fileExtension),
+              let file = FileURL(url: url) else {
+            assertionFailure("Missing bundled reading font: \(resource).\(fileExtension)")
+            return nil
+        }
+        return CSSFontFamilyDeclaration(
+            fontFamily: family,
+            alternates: alternates,
+            fontFaces: [CSSFontFace(file: file)]
+        ).eraseToAnyHTMLFontFamilyDeclaration()
     }
 }

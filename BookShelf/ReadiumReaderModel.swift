@@ -28,6 +28,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     private var speechSettings = SpeechSettings()
     private var positionCountsByReadingOrder: [Int] = []
     private var highlightedUtterance: Locator?
+    private var locationWhenSpeechPaused: Locator?
     private var lastSpeechNavigationAt = Date.distantPast
     private var isSpeechNavigating = false
 
@@ -50,7 +51,12 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
                 initialLocation: initialLocation,
                 config: .init(
                     preferences: preferences,
-                    disablePageTurnsWhileScrolling: true
+                    disablePageTurnsWhileScrolling: true,
+                    contentInset: [
+                        .compact: (top: 48, bottom: 34),
+                        .regular: (top: 72, bottom: 62),
+                    ],
+                    fontFamilyDeclarations: ReaderFonts.declarations()
                 )
             )
             navigator.delegate = self
@@ -78,12 +84,9 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
                 publication: publication,
                 config: .init(
                     defaultLanguage: Language(code: .bcp47(speechSettings.languageCode)),
-                    voiceIdentifier: speechSettings.engine == .kokoro ? "kokoro.\(speechSettings.kokoroVoice)" : (speechSettings.voiceIdentifier.isEmpty ? nil : speechSettings.voiceIdentifier)
+                    voiceIdentifier: speechSettings.voiceIdentifier.isEmpty ? nil : speechSettings.voiceIdentifier
                 ),
-                engineFactory: { [weak self] in
-                    if speechSettings.engine == .kokoro { return KokoroTTSEngine(settings: speechSettings) }
-                    return AVTTSEngine(delegate: self)
-                },
+                engineFactory: { [weak self] in AVTTSEngine(delegate: self) },
                 delegate: self
             )
         } catch {
@@ -125,10 +128,6 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     }
 
     func toggleSpeech() {
-        if speechSettings.engine == .kokoro && !KokoroModel.isInstalled {
-            errorMessage = "请先到书架 → 设置下载 Kokoro 模型，或将朗读引擎切回系统朗读。"
-            return
-        }
         guard let synthesizer = speechSynthesizer else { return }
         switch synthesizer.state {
         case .stopped:
@@ -143,7 +142,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
 
     func stopSpeech() {
         speechSynthesizer?.stop()
-        if speechSettings.engine == .kokoro { Task { await KokoroWorker.shared.unload() } }
+        locationWhenSpeechPaused = nil
         updateSpeechHighlight(nil)
     }
 
@@ -272,6 +271,24 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
                 total: totalPositions
             )
         }
+    }
+
+    private func readingLocationChanged(from previous: Locator, to current: Locator) -> Bool {
+        if !previous.href.isEquivalentTo(current.href) {
+            return true
+        }
+        if let previousPosition = previous.locations.position,
+           let currentPosition = current.locations.position,
+           previousPosition != currentPosition {
+            return true
+        }
+
+        let previousProgression = previous.locations.progression ?? previous.locations.totalProgression
+        let currentProgression = current.locations.progression ?? current.locations.totalProgression
+        if let previousProgression, let currentProgression {
+            return abs(previousProgression - currentProgression) > 0.0005
+        }
+        return false
     }
 }
 
@@ -449,6 +466,17 @@ extension ReadiumReaderModel: EPUBNavigatorDelegate {
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         updateReadingProgress(from: locator)
+
+        guard
+            case .paused = speechSynthesizer?.state,
+            let pausedLocation = locationWhenSpeechPaused,
+            readingLocationChanged(from: pausedLocation, to: locator)
+        else { return }
+
+        // A paused utterance belongs to the old viewport. Discard it after the
+        // reader moves so the next play starts at the first visible text on the
+        // newly selected page instead of resuming off-screen audio.
+        stopSpeech()
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {
@@ -461,12 +489,15 @@ extension ReadiumReaderModel: PublicationSpeechSynthesizerDelegate {
         switch state {
         case .stopped:
             isSpeaking = false
+            locationWhenSpeechPaused = nil
             updateSpeechHighlight(nil)
         case let .paused(utterance):
             isSpeaking = false
+            locationWhenSpeechPaused = navigator?.currentLocation ?? utterance.locator
             updateSpeechHighlight(utterance.locator)
         case let .playing(utterance, range):
             isSpeaking = true
+            locationWhenSpeechPaused = nil
             updateSpeechHighlight(utterance.locator)
             if let range { followSpokenWord(range) }
         }
