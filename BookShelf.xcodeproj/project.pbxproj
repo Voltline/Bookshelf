@@ -100,11 +100,12 @@
 				};
 			};
 			buildConfigurationList = B254862B30106621008753A2 /* Build configuration list for PBXProject "BookShelf" */;
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = B254862730106621008753A2;
 			minimizedProjectReferenceProxies = 1;

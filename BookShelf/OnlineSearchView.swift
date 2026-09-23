@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct OnlineSearchView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var searchedTerm = ""
     @State private var source: OnlineBookSource = .all
@@ -88,9 +87,8 @@ struct OnlineSearchView: View {
                 }
             }
             .navigationTitle("在线找书")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
-            .searchable(text: $query, prompt: "书名或作者")
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "书名或作者")
             .onSubmit(of: .search) { performSearch() }
             .onChange(of: source) { _, _ in if hasSearched { performSearch() } }
         }

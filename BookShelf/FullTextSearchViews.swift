@@ -83,7 +83,6 @@ struct BookFullTextSearchView: View {
 }
 
 struct LibraryFullTextSearchView: View {
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject var library: LibraryStore
     @State private var query = ""
     @State private var searchedTerm = ""
@@ -141,10 +140,9 @@ struct LibraryFullTextSearchView: View {
                     ContentUnavailableView.search(text: searchedTerm)
                 }
             }
-            .navigationTitle("书架全文搜索")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { searchTask?.cancel(); dismiss() } } }
-            .searchable(text: $query, prompt: "搜索所有书籍正文")
+            .navigationTitle("全文搜索")
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索所有书籍正文")
             .onSubmit(of: .search) { performSearch() }
         }
         .onDisappear {

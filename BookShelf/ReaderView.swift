@@ -78,6 +78,7 @@ struct ReaderView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar(model.controlsVisible ? .visible : .hidden, for: .navigationBar)
         .toolbarColorScheme(readingTheme == .night ? .dark : .light, for: .navigationBar)
         .toolbar {
