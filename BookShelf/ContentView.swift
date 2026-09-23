@@ -3,12 +3,15 @@ import UniformTypeIdentifiers
 
 extension UTType {
     static let epub = UTType(filenameExtension: "epub") ?? .data
+    static let txt = UTType(filenameExtension: "txt") ?? .plainText
 }
 
 struct ContentView: View {
     @EnvironmentObject private var library: LibraryStore
     @State private var isImporterPresented = false
     @State private var isSettingsPresented = false
+    @State private var isOnlineSearchPresented = false
+    @State private var isLibraryFullTextSearchPresented = false
     @State private var searchText = ""
     @State private var pendingDeletion: Book?
 
@@ -26,15 +29,18 @@ struct ContentView: View {
             .navigationTitle("书架")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
+                    Button { isLibraryFullTextSearchPresented = true } label: { Label("搜索书籍正文", systemImage: "text.magnifyingglass") }
+                        .disabled(library.books.isEmpty)
+                    Button { isOnlineSearchPresented = true } label: { Label("在线找书", systemImage: "globe") }
                     Button { isSettingsPresented = true } label: { Label("设置", systemImage: "gearshape") }
-                    Button { isImporterPresented = true } label: { Label("导入 EPUB", systemImage: "plus") }
+                    Button { isImporterPresented = true } label: { Label("导入书籍", systemImage: "plus") }
                         .disabled(library.isImporting)
                 }
             }
             .searchable(text: $searchText, prompt: "搜索书名或作者")
             .navigationDestination(for: Book.self) { book in ReaderView(book: book, library: library) }
         }
-        .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.epub], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.epub, .txt], allowsMultipleSelection: false) { result in
             guard case .success(let urls) = result, let url = urls.first else {
                 if case .failure(let error) = result { library.errorMessage = error.localizedDescription }
                 return
@@ -42,6 +48,8 @@ struct ContentView: View {
             Task { _ = await library.importBook(from: url) }
         }
         .sheet(isPresented: $isSettingsPresented) { AppSettingsView() }
+        .sheet(isPresented: $isOnlineSearchPresented) { OnlineSearchView() }
+        .fullScreenCover(isPresented: $isLibraryFullTextSearchPresented) { LibraryFullTextSearchView(library: library) }
         .alert("无法完成操作", isPresented: Binding(get: { library.errorMessage != nil }, set: { if !$0 { library.errorMessage = nil } })) {
             Button("好", role: .cancel) { library.errorMessage = nil }
         } message: { Text(library.errorMessage ?? "未知错误") }
@@ -74,9 +82,9 @@ struct ContentView: View {
         ContentUnavailableView {
             Label("书架是空的", systemImage: "books.vertical")
         } description: {
-            Text("导入一本 EPUB，开始阅读或聆听。")
+            Text("导入 EPUB 或 TXT，开始阅读或聆听。")
         } actions: {
-            Button { isImporterPresented = true } label: { Label("导入 EPUB", systemImage: "square.and.arrow.down") }
+            Button { isImporterPresented = true } label: { Label("导入书籍", systemImage: "square.and.arrow.down") }
                 .buttonStyle(.borderedProminent)
         }
     }

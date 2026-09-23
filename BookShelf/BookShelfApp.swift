@@ -16,6 +16,10 @@ struct BookShelfApp: App {
             #if DEBUG && targetEnvironment(simulator)
             if ProcessInfo.processInfo.arguments.contains("--font-regression") {
                 FontRegressionProbe()
+            } else if ProcessInfo.processInfo.arguments.contains("--txt-regression") {
+                TXTRegressionProbe()
+            } else if ProcessInfo.processInfo.arguments.contains("--fulltext-regression") {
+                FullTextRegressionProbe()
             } else {
                 ContentView().environmentObject(library)
             }

@@ -28,7 +28,18 @@ final class LibraryStore: ObservableObject {
         let destination = booksDirectory.appendingPathComponent("\(id.uuidString).epub")
         do {
             try ensureDirectories()
-            try fileManager.copyItem(at: sourceURL, to: destination)
+            switch sourceURL.pathExtension.lowercased() {
+            case "epub":
+                try fileManager.copyItem(at: sourceURL, to: destination)
+            case "txt":
+                try await TXTImporter.convert(
+                    sourceURL,
+                    to: destination,
+                    title: sourceURL.deletingPathExtension().lastPathComponent
+                )
+            default:
+                throw CocoaError(.fileReadUnsupportedScheme)
+            }
             let document = try await parser.parse(url: destination)
             var coverName: String?
             if let cover = document.cover {

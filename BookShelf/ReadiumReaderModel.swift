@@ -22,19 +22,22 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
 
     let book: Book
     private let store: LibraryStore
+    private let requestedInitialLocation: Locator?
     private var speechSynthesizer: PublicationSpeechSynthesizer?
     private var navigationAdapter: DirectionalNavigationAdapter?
     private var verticalScrollNavigationAdapter: VerticalScrollNavigationAdapter?
     private var speechSettings = SpeechSettings()
     private var positionCountsByReadingOrder: [Int] = []
     private var highlightedUtterance: Locator?
+    private var activeSearchResult: Locator?
     private var locationWhenSpeechPaused: Locator?
     private var lastSpeechNavigationAt = Date.distantPast
     private var isSpeechNavigating = false
 
-    init(book: Book, store: LibraryStore) {
+    init(book: Book, store: LibraryStore, initialSearchLocator: Locator? = nil) {
         self.book = book
         self.store = store
+        requestedInitialLocation = initialSearchLocator
     }
 
     func load(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme, font: ReadingFont, speechSettings: SpeechSettings) async {
@@ -44,7 +47,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         do {
             let publication = try await store.publication(for: book)
             let savedLocation = try book.locator.locatorJSON.flatMap { try Locator(jsonString: $0) }
-            let initialLocation = validatedInitialLocation(savedLocation, in: publication)
+            let initialLocation = requestedInitialLocation ?? validatedInitialLocation(savedLocation, in: publication)
             let preferences = makePreferences(fontSize: fontSize, lineSpacing: lineSpacing, mode: mode, theme: theme, font: font)
             let navigator = try EPUBNavigatorViewController(
                 publication: publication,
@@ -72,6 +75,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
 
             self.publication = publication
             self.navigator = navigator
+            activeSearchResult = requestedInitialLocation
             navigationAdapter = adapter
             verticalScrollNavigationAdapter = verticalScrollAdapter
             tableOfContents = flatten((try? await publication.tableOfContents().get()) ?? [])
@@ -89,6 +93,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
                 engineFactory: { [weak self] in AVTTSEngine(delegate: self) },
                 delegate: self
             )
+            applySearchHighlight()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -117,6 +122,28 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         }
     }
     func go(to link: Link) { Task { await navigator?.go(to: link, options: .animated) } }
+
+    func go(toSearchResult locator: Locator) {
+        stopSpeech()
+        activeSearchResult = locator
+        Task {
+            guard let navigator else { return }
+            guard await navigator.go(to: locator, options: .animated) else {
+                errorMessage = "无法跳转到这条搜索结果，请重试。"
+                return
+            }
+            applySearchHighlight()
+            controlsVisible = false
+        }
+    }
+
+    private func applySearchHighlight() {
+        guard let navigator else { return }
+        let decorations = activeSearchResult.map {
+            [Decoration(id: "search-current-hit", locator: $0, style: .highlight(tint: UIColor.systemOrange.withAlphaComponent(0.4)))]
+        } ?? []
+        navigator.apply(decorations: decorations, in: "search")
+    }
 
     func go(to progression: Double) {
         guard let publication, let navigator else { return }
@@ -462,6 +489,7 @@ extension ReadiumReaderModel: EPUBNavigatorDelegate {
 
     func navigator(_ navigator: EPUBNavigatorViewController, viewportDidChange viewport: EPUBNavigatorViewController.Viewport?) {
         isNavigatorReady = viewport != nil
+        if viewport != nil { applySearchHighlight() }
     }
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {

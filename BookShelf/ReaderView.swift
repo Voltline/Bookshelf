@@ -19,12 +19,13 @@ struct ReaderView: View {
     @AppStorage(SpeechSettingKeys.highlightEnabled) private var speechHighlightEnabled = true
     @AppStorage(SpeechSettingKeys.autoPageTurnEnabled) private var speechAutoPageTurnEnabled = true
     @State private var showChapters = false
+    @State private var showSearch = false
     @State private var showSettings = false
     @State private var sliderProgress = 0.0
     @State private var isScrubbingProgress = false
 
-    init(book: Book, library: LibraryStore) {
-        _model = StateObject(wrappedValue: ReadiumReaderModel(book: book, store: library))
+    init(book: Book, library: LibraryStore, initialSearchLocator: Locator? = nil) {
+        _model = StateObject(wrappedValue: ReadiumReaderModel(book: book, store: library, initialSearchLocator: initialSearchLocator))
     }
 
     private var readingTheme: ReadingTheme { ReadingTheme(rawValue: theme) ?? .paper }
@@ -92,6 +93,11 @@ struct ReaderView: View {
                     .lineLimit(1)
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { showSearch = true } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("搜索本书正文")
+                .disabled(model.publication == nil)
                 Button { showChapters = true } label: {
                     Image(systemName: "list.bullet")
                 }
@@ -125,6 +131,7 @@ struct ReaderView: View {
         .onDisappear { model.stopSpeech() }
         .onChange(of: font) { _, _ in applyReadingPreferences() }
         .sheet(isPresented: $showChapters) { chapterSheet }
+        .sheet(isPresented: $showSearch) { BookFullTextSearchView(model: model).presentationDetents([.large]) }
         .sheet(isPresented: $showSettings, onDismiss: {
             applyReadingPreferences()
         }) { settingsSheet }

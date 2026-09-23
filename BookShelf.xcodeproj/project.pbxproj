@@ -10,6 +10,8 @@
 		A100000130106621008753A2 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = A100000430106621008753A2 /* ReadiumShared */; };
 		A100000230106621008753A2 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = A100000530106621008753A2 /* ReadiumStreamer */; };
 		A100000630106621008753A2 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = A100000730106621008753A2 /* ReadiumNavigator */; };
+		A100000830106621008753A2 /* ReadiumZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A100000A30106621008753A2 /* ReadiumZIPFoundation */; };
+		A100000B30106621008753A2 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = A100000D30106621008753A2 /* SwiftSoup */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +33,8 @@
 				A100000130106621008753A2 /* ReadiumShared in Frameworks */,
 				A100000230106621008753A2 /* ReadiumStreamer in Frameworks */,
 				A100000630106621008753A2 /* ReadiumNavigator in Frameworks */,
+				A100000830106621008753A2 /* ReadiumZIPFoundation in Frameworks */,
+				A100000B30106621008753A2 /* SwiftSoup in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -73,6 +77,8 @@
 				A100000430106621008753A2 /* ReadiumShared */,
 				A100000530106621008753A2 /* ReadiumStreamer */,
 				A100000730106621008753A2 /* ReadiumNavigator */,
+				A100000A30106621008753A2 /* ReadiumZIPFoundation */,
+				A100000D30106621008753A2 /* SwiftSoup */,
 			);
 			productName = BookShelf;
 			productReference = B254863030106621008753A2 /* BookShelf.app */;
@@ -104,6 +110,8 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */,
+				A100000930106621008753A2 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				A100000C30106621008753A2 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B254863130106621008753A2 /* Products */;
@@ -265,6 +273,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = BookShelf;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -305,6 +314,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = BookShelf;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -363,6 +373,22 @@
 				version = 3.8.0;
 			};
 		};
+		A100000930106621008753A2 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/readium/ZIPFoundation.git";
+			requirement = {
+				kind = exactVersion;
+				version = 3.0.1;
+			};
+		};
+		A100000C30106621008753A2 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/scinfu/SwiftSoup.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.13.6;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -380,6 +406,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A100000330106621008753A2 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
 			productName = ReadiumNavigator;
+		};
+		A100000A30106621008753A2 /* ReadiumZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000930106621008753A2 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ReadiumZIPFoundation;
+		};
+		A100000D30106621008753A2 /* SwiftSoup */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000C30106621008753A2 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
+			productName = SwiftSoup;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
