@@ -55,8 +55,11 @@ final class EPUBParser {
             publication = try await publicationOpener.open(
                 asset: asset,
                 allowUserInteraction: false,
-                onCreatePublication: { manifest, _, _ in
+                onCreatePublication: { manifest, _, services in
                     Self.repairMalformedReadingOrder(in: &manifest)
+                    // Readium 3.9–3.11's new content search can trap on mixed-width
+                    // Chinese text. Keep the previous service until the fix ships.
+                    services.setSearchServiceFactory(StringSearchService.makeFactory())
                 }
             ).get()
         } catch {

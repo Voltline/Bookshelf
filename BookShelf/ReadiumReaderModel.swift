@@ -293,7 +293,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         if persist {
             store.updateLocation(
                 bookID: book.id,
-                locatorJSON: locator.jsonString,
+                locatorJSON: try? locator.jsonString(),
                 position: position,
                 total: totalPositions
             )
@@ -487,7 +487,7 @@ extension ReadiumReaderModel: EPUBNavigatorDelegate {
         ))
     }
 
-    func navigator(_ navigator: EPUBNavigatorViewController, viewportDidChange viewport: EPUBNavigatorViewController.Viewport?) {
+    func navigator(_ navigator: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
         isNavigatorReady = viewport != nil
         if viewport != nil { applySearchHighlight() }
     }
