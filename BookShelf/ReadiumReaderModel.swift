@@ -11,6 +11,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     @Published private(set) var navigator: EPUBNavigatorViewController?
     @Published private(set) var publication: Publication?
     @Published private(set) var tableOfContents: [Link] = []
+    @Published private(set) var readerMarks: [ReaderMark] = []
     @Published private(set) var position = 1
     @Published private(set) var totalPositions = 0
     @Published var progression = 0.0
@@ -38,6 +39,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         self.book = book
         self.store = store
         requestedInitialLocation = initialSearchLocator
+        readerMarks = store.readerMarks(for: book.id)
     }
 
     func load(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme, font: ReadingFont, speechSettings: SpeechSettings) async {
@@ -54,6 +56,10 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
                 initialLocation: initialLocation,
                 config: .init(
                     preferences: preferences,
+                    editingActions: EditingAction.defaultActions + [
+                        EditingAction(title: "划线", action: #selector(ReaderNavigatorHostController.highlightSelection)),
+                        EditingAction(title: "笔记", action: #selector(ReaderNavigatorHostController.noteSelection))
+                    ],
                     disablePageTurnsWhileScrolling: true,
                     contentInset: [
                         .compact: (top: 48, bottom: 34),
@@ -94,6 +100,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
                 delegate: self
             )
             applySearchHighlight()
+            applySavedHighlights()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -107,18 +114,14 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     func goForward() {
         Task {
             guard let navigator, isNavigatorReady else { return }
-            if await navigator.goForward(options: .animated) == false {
-                await moveToAdjacentResource(offset: 1, navigator: navigator)
-            }
+            _ = await navigator.goForward(options: .animated)
         }
     }
 
     func goBackward() {
         Task {
             guard let navigator, isNavigatorReady else { return }
-            if await navigator.goBackward(options: .animated) == false {
-                await moveToAdjacentResource(offset: -1, navigator: navigator)
-            }
+            _ = await navigator.goBackward(options: .animated)
         }
     }
     func go(to link: Link) { Task { await navigator?.go(to: link, options: .animated) } }
@@ -143,6 +146,78 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
             [Decoration(id: "search-current-hit", locator: $0, style: .highlight(tint: UIColor.systemOrange.withAlphaComponent(0.4)))]
         } ?? []
         navigator.apply(decorations: decorations, in: "search")
+    }
+
+    private func applySavedHighlights() {
+        guard let navigator else { return }
+        let decorations = readerMarks.compactMap { mark -> Decoration? in
+            guard mark.kind == .highlight, let locator = mark.locator else { return nil }
+            return Decoration(
+                id: mark.id.uuidString,
+                locator: locator,
+                style: .highlight(tint: mark.color.tint.withAlphaComponent(0.45))
+            )
+        }
+        navigator.apply(decorations: decorations, in: "reader-marks")
+    }
+
+    func makeHighlight(at locator: Locator) -> ReaderMark? {
+        guard let text = locator.text.highlight?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            errorMessage = "没有选中的文字，请重新选择。"
+            return nil
+        }
+        guard let locatorJSON = try? locator.jsonString() else {
+            errorMessage = "无法保存当前位置，请重试。"
+            return nil
+        }
+        let chapter = locator.title
+            ?? tableOfContents.first(where: { $0.url().isEquivalentTo(locator.href) })?.title
+            ?? "当前位置"
+        return ReaderMark(
+            id: UUID(), kind: .highlight, locatorJSON: locatorJSON, chapter: chapter,
+            excerpt: text, note: "", color: .yellow, createdAt: Date()
+        )
+    }
+
+    @discardableResult
+    func saveReaderMark(_ mark: ReaderMark) -> Bool {
+        guard mark.kind == .highlight else { return false }
+        do {
+            try store.saveReaderMark(mark, for: book.id)
+            readerMarks = store.readerMarks(for: book.id)
+            if mark.kind == .highlight { applySavedHighlights() }
+            return true
+        } catch {
+            errorMessage = "无法保存划线与笔记：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeReaderMark(_ mark: ReaderMark) -> Bool {
+        do {
+            try store.removeReaderMark(id: mark.id, for: book.id)
+            readerMarks = store.readerMarks(for: book.id)
+            if mark.kind == .highlight { applySavedHighlights() }
+            return true
+        } catch {
+            errorMessage = "无法删除划线与笔记：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func go(to mark: ReaderMark) {
+        guard let locator = mark.locator else {
+            errorMessage = "这条划线或笔记的位置已失效。"
+            return
+        }
+        Task {
+            guard await navigator?.go(to: locator, options: .animated) == true else {
+                errorMessage = "无法跳转到划线或笔记，请重试。"
+                return
+            }
+            controlsVisible = false
+        }
     }
 
     func go(to progression: Double) {
@@ -207,18 +282,6 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         // and save the last chapter as position 1 / 0%. That locator is
         // internally contradictory once the spine has been repaired.
         return nil
-    }
-
-    private func moveToAdjacentResource(offset: Int, navigator: EPUBNavigatorViewController) async {
-        guard
-            let publication,
-            let href = navigator.currentLocation?.href,
-            let currentIndex = publication.readingOrder.firstIndex(where: { $0.url().isEquivalentTo(href) })
-        else { return }
-
-        let targetIndex = currentIndex + offset
-        guard publication.readingOrder.indices.contains(targetIndex) else { return }
-        _ = await navigator.go(to: publication.readingOrder[targetIndex], options: .animated)
     }
 
     private func updateSpeechHighlight(_ locator: Locator?) {

@@ -3,6 +3,11 @@ import ReadiumShared
 import SwiftUI
 
 struct ReaderView: View {
+    private enum Panel: String, CaseIterable {
+        case chapters = "目录"
+        case highlights = "划线"
+    }
+
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: ReadiumReaderModel
     @AppStorage("reader.fontSize") private var fontSize = 20.0
@@ -23,6 +28,8 @@ struct ReaderView: View {
     @State private var showSettings = false
     @State private var sliderProgress = 0.0
     @State private var isScrubbingProgress = false
+    @State private var panel: Panel = .chapters
+    @State private var editingMark: ReaderMark?
 
     init(book: Book, library: LibraryStore, initialSearchLocator: Locator? = nil) {
         _model = StateObject(wrappedValue: ReadiumReaderModel(book: book, store: library, initialSearchLocator: initialSearchLocator))
@@ -58,7 +65,18 @@ struct ReaderView: View {
     var body: some View {
         ZStack {
             if let navigator = model.navigator {
-                EPUBNavigatorContainer(navigator: navigator)
+                EPUBNavigatorContainer(
+                    navigator: navigator,
+                    onHighlight: { locator in
+                        if let mark = model.makeHighlight(at: locator) { model.saveReaderMark(mark) }
+                    },
+                    onNote: { locator in
+                        editingMark = model.makeHighlight(at: locator)
+                    },
+                    onMarkTap: { id in
+                        editingMark = model.readerMarks.first(where: { $0.id == id })
+                    }
+                )
                     .ignoresSafeArea()
                 if !model.isNavigatorReady {
                     ProgressView("正在载入正文…")
@@ -102,7 +120,7 @@ struct ReaderView: View {
                 Button { showChapters = true } label: {
                     Image(systemName: "list.bullet")
                 }
-                .accessibilityLabel("目录")
+                .accessibilityLabel("目录与划线")
                 Button { showSettings = true } label: {
                     Image(systemName: "textformat.size")
                 }
@@ -132,6 +150,9 @@ struct ReaderView: View {
         .onDisappear { model.stopSpeech() }
         .onChange(of: font) { _, _ in applyReadingPreferences() }
         .sheet(isPresented: $showChapters) { chapterSheet }
+        .sheet(item: $editingMark) { mark in
+            NavigationStack { markEditor(for: mark) }
+        }
         .sheet(isPresented: $showSearch) { BookFullTextSearchView(model: model).presentationDetents([.large]) }
         .sheet(isPresented: $showSettings, onDismiss: {
             applyReadingPreferences()
@@ -174,7 +195,8 @@ struct ReaderView: View {
                 }
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
                 .frame(height: 44)
             }
             .frame(maxWidth: .infinity, alignment: .center)
@@ -278,15 +300,64 @@ struct ReaderView: View {
 
     private var chapterSheet: some View {
         NavigationStack {
-            List(Array(model.tableOfContents.enumerated()), id: \.offset) { _, link in
-                Button {
-                    model.go(to: link); showChapters = false
-                } label: { Text(link.title ?? "未命名章节").foregroundStyle(.primary) }
+            VStack(spacing: 0) {
+                Picker("内容", selection: $panel) {
+                    ForEach(Panel.allCases, id: \.self) { panel in Text(panel.rawValue).tag(panel) }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+
+                List {
+                    switch panel {
+                    case .chapters:
+                        ForEach(Array(model.tableOfContents.enumerated()), id: \.offset) { _, link in
+                            Button {
+                                model.go(to: link)
+                                showChapters = false
+                            } label: { Text(link.title ?? "未命名章节").foregroundStyle(.primary) }
+                        }
+                    case .highlights:
+                        ForEach(model.readerMarks.filter { $0.kind == .highlight }.sorted { $0.createdAt > $1.createdAt }) { mark in
+                            NavigationLink {
+                                markEditor(for: mark)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(mark.excerpt).lineLimit(3)
+                                    Text(mark.note.isEmpty ? mark.chapter : mark.note)
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                }
+                            }
+                            .swipeActions {
+                                Button("删除", role: .destructive) { model.removeReaderMark(mark) }
+                            }
+                        }
+                    }
+                }
+                .overlay {
+                    if panel == .chapters && model.tableOfContents.isEmpty {
+                        ContentUnavailableView("没有目录", systemImage: "list.bullet")
+                    } else if panel == .highlights && !model.readerMarks.contains(where: { $0.kind == .highlight }) {
+                        ContentUnavailableView("还没有划线", systemImage: "highlighter", description: Text("长按正文选中文字即可添加。"))
+                    }
+                }
             }
-            .navigationTitle("目录").navigationBarTitleDisplayMode(.inline)
-            .overlay { if model.tableOfContents.isEmpty { ContentUnavailableView("没有目录", systemImage: "list.bullet") } }
+            .navigationTitle("目录与标注").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showChapters = false } } }
         }.presentationDetents([.medium, .large])
+    }
+
+    private func markEditor(for mark: ReaderMark) -> some View {
+        ReaderMarkEditor(
+            mark: mark,
+            isSaved: model.readerMarks.contains(where: { $0.id == mark.id }),
+            onSave: { model.saveReaderMark($0) },
+            onDelete: { model.removeReaderMark(mark) },
+            onGoTo: {
+                model.go(to: mark)
+                showChapters = false
+                editingMark = nil
+            }
+        )
     }
 
     private var settingsSheet: some View {
@@ -308,10 +379,4 @@ struct ReaderView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showSettings = false } } }
         }.presentationDetents([.medium, .large])
     }
-}
-
-private struct EPUBNavigatorContainer: UIViewControllerRepresentable {
-    let navigator: EPUBNavigatorViewController
-    func makeUIViewController(context: Context) -> EPUBNavigatorViewController { navigator }
-    func updateUIViewController(_ uiViewController: EPUBNavigatorViewController, context: Context) {}
 }

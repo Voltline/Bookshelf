@@ -13,10 +13,12 @@ final class LibraryStore: ObservableObject {
     private let fileManager = FileManager.default
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var marksByBook: [String: [ReaderMark]] = [:]
 
     init() {
         removeLegacyKokoroData()
         loadIndex()
+        loadMarks()
     }
 
     func importBook(from sourceURL: URL) async -> Book? {
@@ -87,10 +89,38 @@ final class LibraryStore: ObservableObject {
         saveIndex()
     }
 
+    func readerMarks(for bookID: UUID) -> [ReaderMark] {
+        (marksByBook[bookID.uuidString] ?? []).filter { $0.kind == .highlight }
+    }
+
+    func saveReaderMark(_ mark: ReaderMark, for bookID: UUID) throws {
+        var updated = marksByBook
+        var marks = updated[bookID.uuidString] ?? []
+        if let index = marks.firstIndex(where: { $0.id == mark.id }) {
+            marks[index] = mark
+        } else {
+            marks.append(mark)
+        }
+        updated[bookID.uuidString] = marks
+        try saveMarks(updated)
+        marksByBook = updated
+    }
+
+    func removeReaderMark(id: UUID, for bookID: UUID) throws {
+        var updated = marksByBook
+        updated[bookID.uuidString]?.removeAll { $0.id == id }
+        if updated[bookID.uuidString]?.isEmpty == true { updated.removeValue(forKey: bookID.uuidString) }
+        try saveMarks(updated)
+        marksByBook = updated
+    }
+
     func delete(_ book: Book) {
         try? fileManager.removeItem(at: booksDirectory.appendingPathComponent(book.fileName))
         if let cover = book.coverFileName { try? fileManager.removeItem(at: coversDirectory.appendingPathComponent(cover)) }
         books.removeAll { $0.id == book.id }; saveIndex()
+        marksByBook.removeValue(forKey: book.id.uuidString)
+        do { try saveMarks(marksByBook) }
+        catch { errorMessage = "无法保存划线与笔记：\(error.localizedDescription)" }
     }
 
     private var applicationSupport: URL {
@@ -99,6 +129,7 @@ final class LibraryStore: ObservableObject {
     private var booksDirectory: URL { applicationSupport.appendingPathComponent("Books", isDirectory: true) }
     private var coversDirectory: URL { applicationSupport.appendingPathComponent("Covers", isDirectory: true) }
     private var indexURL: URL { applicationSupport.appendingPathComponent("library.json") }
+    private var marksURL: URL { applicationSupport.appendingPathComponent("reader-marks.json") }
 
     /// Kokoro was removed from the app. Clear its large downloaded model and
     /// obsolete preferences once the updated app is launched.
@@ -120,6 +151,24 @@ final class LibraryStore: ObservableObject {
         guard let data = try? Data(contentsOf: indexURL), let saved = try? decoder.decode([Book].self, from: data) else { return }
         books = saved.filter { fileManager.fileExists(atPath: booksDirectory.appendingPathComponent($0.fileName).path) }
             .sorted { $0.importedAt > $1.importedAt }
+    }
+
+    private func loadMarks() {
+        guard fileManager.fileExists(atPath: marksURL.path) else { return }
+        do {
+            let data = try Data(contentsOf: marksURL)
+            if let marks = try? decoder.decode([String: [ReaderMark]].self, from: data) {
+                marksByBook = marks
+            } else {
+                let legacy = try decoder.decode([UUID: [ReaderMark]].self, from: data)
+                marksByBook = Dictionary(uniqueKeysWithValues: legacy.map { ($0.key.uuidString, $0.value) })
+            }
+        } catch { errorMessage = "无法读取划线与笔记：\(error.localizedDescription)" }
+    }
+
+    private func saveMarks(_ marks: [String: [ReaderMark]]) throws {
+        try ensureDirectories()
+        try encoder.encode(marks).write(to: marksURL, options: .atomic)
     }
     private func saveIndex() {
         do { try ensureDirectories(); try encoder.encode(books).write(to: indexURL, options: .atomic) }
