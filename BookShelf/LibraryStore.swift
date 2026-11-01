@@ -5,6 +5,7 @@ import ReadiumShared
 
 @MainActor
 final class LibraryStore: ObservableObject {
+    let activity: ReadingActivityStore
     @Published private(set) var books: [Book] = []
     @Published private(set) var deletedBooks: [Book] = []
     @Published private(set) var collections: [BookCollection] = []
@@ -12,6 +13,7 @@ final class LibraryStore: ObservableObject {
     @Published var isImporting = false
     @Published var errorMessage: String?
     @Published private(set) var importProgress: BookImportProgress?
+    @Published private(set) var importCancellationRequested = false
 
     private let parser = EPUBParser()
     private let fileManager = FileManager.default
@@ -22,10 +24,13 @@ final class LibraryStore: ObservableObject {
     private var indexSaveTask: Task<Void, Never>?
     private var indexLoadFailed = false
     private var marksLoadFailed = false
+    private var legacyFingerprints: [UUID: String] = [:]
 
     init(directory: URL? = nil) {
-        storageDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let resolvedDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("BookShelf", isDirectory: true)
+        storageDirectory = resolvedDirectory
+        activity = ReadingActivityStore(directory: resolvedDirectory)
         if directory == nil { removeLegacyKokoroData() }
         loadIndex()
         loadMarks()
@@ -35,7 +40,7 @@ final class LibraryStore: ObservableObject {
     func importBook(from sourceURL: URL) async -> Book? {
         let report = await importBooks(from: [sourceURL])
         if let failure = report.failures.first { errorMessage = failure.message }
-        return report.imported.first
+        return report.imported.first ?? report.restored.first ?? report.skipped.first?.book
     }
 
     func importBooks(from urls: [URL]) async -> BookImportReport {
@@ -45,15 +50,32 @@ final class LibraryStore: ObservableObject {
             })
         }
         isImporting = true
-        defer { isImporting = false; importProgress = nil }
+        importCancellationRequested = false
+        defer { isImporting = false; importProgress = nil; importCancellationRequested = false }
         var report = BookImportReport(imported: [], failures: [])
         for (index, url) in urls.enumerated() {
+            guard !importCancellationRequested else { report.cancelledFileCount = urls.count - index; break }
             importProgress = .init(completed: index, total: urls.count, fileName: url.lastPathComponent)
             await Task.yield()
-            do { report.imported.append(try await importOne(from: url)) }
+            do {
+                switch try await importOne(from: url) {
+                case .imported(let book): report.imported.append(book)
+                case .restored(let book): report.restored.append(book)
+                case .skipped(let book): report.skipped.append(.init(fileName: url.lastPathComponent, book: book))
+                }
+            }
             catch { report.failures.append(.init(fileName: url.lastPathComponent, message: importErrorMessage(error))) }
         }
         return report
+    }
+
+    func cancelImport() {
+        guard isImporting else { return }
+        importCancellationRequested = true
+    }
+
+    private enum ImportOutcome {
+        case imported(Book), restored(Book), skipped(Book)
     }
 
     private func importErrorMessage(_ error: Error) -> String {
@@ -63,9 +85,23 @@ final class LibraryStore: ObservableObject {
         return error.localizedDescription
     }
 
-    private func importOne(from sourceURL: URL) async throws -> Book {
+    private func importOne(from sourceURL: URL) async throws -> ImportOutcome {
         let accessed = sourceURL.startAccessingSecurityScopedResource()
         defer { if accessed { sourceURL.stopAccessingSecurityScopedResource() } }
+        let format = sourceURL.pathExtension.lowercased()
+        guard ["epub", "txt"].contains(format) else { throw CocoaError(.fileReadUnsupportedScheme) }
+        let fingerprint = try await FileFingerprint.sha256(of: sourceURL)
+        let byteCount = (try? sourceURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+        if let existing = try await duplicateBook(fingerprint: fingerprint, format: format, byteCount: byteCount) {
+            if existing.deletedAt != nil {
+                guard restore(existing), let restored = books.first(where: { $0.id == existing.id }) else {
+                    throw BookImportError.restoreFailed
+                }
+                return .restored(restored)
+            }
+            return .skipped(existing)
+        }
+        importProgress?.stage = .importing
         let id = UUID()
         let destination = booksDirectory.appendingPathComponent("\(id.uuidString).epub")
         let coverDestination = coversDirectory.appendingPathComponent("\(id.uuidString).cover")
@@ -100,16 +136,47 @@ final class LibraryStore: ObservableObject {
             }
             let book = Book(id: id, title: title, author: author, fileName: destination.lastPathComponent,
                             coverFileName: coverName, importedAt: Date(), locator: ReaderLocator(),
-                            sourceFormat: sourceURL.pathExtension.uppercased())
+                            sourceFormat: sourceURL.pathExtension.uppercased(), sourceFingerprint: fingerprint)
             let updated = [book] + books
             try writeIndex(updated)
             books = updated
-            return book
+            return .imported(book)
         } catch {
             try? fileManager.removeItem(at: destination)
             try? fileManager.removeItem(at: coverDestination)
             throw error
         }
+    }
+
+    private func duplicateBook(fingerprint: String, format: String, byteCount: Int?) async throws -> Book? {
+        // Prefer an active copy. Missing files must not prevent a fresh import.
+        let candidates = books + deletedBooks
+        for book in candidates where book.sourceFingerprint == fingerprint {
+            if fileManager.fileExists(atPath: booksDirectory.appendingPathComponent(book.fileName).path) { return book }
+        }
+        // Old EPUBs can be fingerprinted from the retained original file. Old
+        // TXT originals were not retained, so never guess from title/author.
+        guard format == "epub" else { return nil }
+        for book in candidates where book.sourceFingerprint == nil && book.sourceFormat != "TXT" {
+            let url = booksDirectory.appendingPathComponent(book.fileName)
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            if let byteCount, let size = fileSize(for: book), size != Int64(byteCount) { continue }
+            let hash: String
+            if let cached = legacyFingerprints[book.id] { hash = cached }
+            else {
+                guard let computed = try? await FileFingerprint.sha256(of: url) else { continue }
+                hash = computed; legacyFingerprints[book.id] = hash
+            }
+            if hash == fingerprint {
+                var active = books, trash = deletedBooks
+                if let index = active.firstIndex(where: { $0.id == book.id }) { active[index].sourceFingerprint = hash }
+                if let index = trash.firstIndex(where: { $0.id == book.id }) { trash[index].sourceFingerprint = hash }
+                try writeIndex(active, deletedBooks: trash)
+                books = active; deletedBooks = trash
+                return (books + deletedBooks).first { $0.id == book.id }
+            }
+        }
+        return nil
     }
 
     func publication(for book: Book) async throws -> Publication {
@@ -177,6 +244,7 @@ final class LibraryStore: ObservableObject {
     }
 
     func flushPendingChanges() {
+        activity.flush()
         guard indexSaveTask != nil else { return }
         saveIndex()
     }
@@ -252,8 +320,8 @@ final class LibraryStore: ObservableObject {
     @discardableResult
     func permanentlyDelete(_ book: Book) -> Bool {
         guard let current = deletedBooks.first(where: { $0.id == book.id }) else { return false }
-        guard !indexLoadFailed, !marksLoadFailed else {
-            errorMessage = "书架或笔记未能完整读取，暂不能永久删除，以免丢失数据。"
+        guard !indexLoadFailed, !marksLoadFailed, activity.isAvailable else {
+            errorMessage = "书架、笔记或阅读统计未能完整读取，暂不能永久删除。请先修复对应数据；损坏的统计可在阅读记录页面确认清空。"
             return false
         }
         let staging = pendingDeletionDirectory.appendingPathComponent(book.id.uuidString, isDirectory: true)
@@ -285,6 +353,7 @@ final class LibraryStore: ObservableObject {
     }
 
     private func removeMarksForDeletedBook(_ id: UUID) throws {
+        try activity.anonymizeBook(id)
         var updated = marksByBook
         updated.removeValue(forKey: id.uuidString)
         try saveMarks(updated)
@@ -422,12 +491,19 @@ final class LibraryStore: ObservableObject {
 }
 
 struct BookImportProgress {
+    enum Stage { case checking, importing }
     let completed: Int
     let total: Int
     let fileName: String
+    var stage: Stage = .checking
 }
 
 struct BookImportReport: Identifiable {
+    struct Skipped: Identifiable {
+        let id = UUID()
+        let fileName: String
+        let book: Book
+    }
     struct Failure: Identifiable {
         let id = UUID()
         let fileName: String
@@ -436,4 +512,12 @@ struct BookImportReport: Identifiable {
     let id = UUID()
     var imported: [Book]
     var failures: [Failure]
+    var restored: [Book] = []
+    var skipped: [Skipped] = []
+    var cancelledFileCount = 0
+}
+
+private enum BookImportError: LocalizedError {
+    case restoreFailed
+    var errorDescription: String? { "已在最近删除中找到相同书籍，但恢复失败，请到最近删除中重试。" }
 }

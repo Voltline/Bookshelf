@@ -20,8 +20,9 @@ struct TXTRegressionProbe: View {
     }
 
     private func run() async {
+        try? "RUNNING".write(to: URL.documentsDirectory.appendingPathComponent("txt-results.txt"), atomically: true, encoding: .utf8)
         var results: [String] = []
-        let library = LibraryStore()
+        let library = LibraryStore(directory: URL.cachesDirectory.appendingPathComponent("BookshelfTXTRegression", isDirectory: true))
         let gb18030 = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(0x0632))
         let longChapter = String(repeating: "春江潮水连海平，海上明月共潮生。\n", count: 4_000)
         let text = "第一章 开始\n\(longChapter)\n第二章 结尾\n文字 & <标签> 仍可阅读。"

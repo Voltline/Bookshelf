@@ -6,6 +6,7 @@ struct LibraryRegressionProbe: View {
     @State private var previewLibrary: LibraryStore?
     @State private var message = "正在验证书架…"
     @State private var importReport: BookImportReport?
+    @State private var dedupReport: BookImportReport?
 
     var body: some View {
         Group {
@@ -14,6 +15,14 @@ struct LibraryRegressionProbe: View {
                     BookDetailView(book: book, library: previewLibrary) { _ in }
                 } else if ProcessInfo.processInfo.arguments.contains("--preview-import"), let importReport {
                     BookImportReportView(report: importReport)
+                } else if ProcessInfo.processInfo.arguments.contains("--preview-dedup"), let dedupReport {
+                    BookImportReportView(report: dedupReport)
+                } else if ProcessInfo.processInfo.arguments.contains("--preview-library-search") {
+                    LibraryFullTextSearchView(library: previewLibrary)
+                } else if ProcessInfo.processInfo.arguments.contains("--preview-activity") || ProcessInfo.processInfo.arguments.contains("--preview-activity-empty") {
+                    ReadingActivityView(library: previewLibrary, onRead: { _ in })
+                } else if ProcessInfo.processInfo.arguments.contains("--preview-goal") {
+                    NavigationStack { ReadingGoalView(activity: previewLibrary.activity) }
                 } else if ProcessInfo.processInfo.arguments.contains("--preview-collections") {
                     CollectionsView(library: previewLibrary)
                 } else if ProcessInfo.processInfo.arguments.contains("--preview-membership"), let book = previewLibrary.books.first(where: \.isFavorite) {
@@ -32,6 +41,8 @@ struct LibraryRegressionProbe: View {
     }
 
     private func run() async {
+        let resultsURL = URL.documentsDirectory.appendingPathComponent("library-results.txt")
+        try? "RUNNING".write(to: resultsURL, atomically: true, encoding: .utf8)
         let manager = FileManager.default
         let directory = URL.cachesDirectory.appendingPathComponent("BookshelfLibraryRegression", isDirectory: true)
         var results: [String] = []
@@ -104,12 +115,34 @@ struct LibraryRegressionProbe: View {
             try require(model.sleepTimerEnd == nil, "sleep close cleanup")
             results.append("PASS: sleep timer deadline, expiration, cancellation and leaving reader")
             results += try await OrganizationRegressionChecks.run(directory: directory, source: first)
+            results += try await ImportSearchRegressionChecks.run(directory: directory)
+            results += try await ReadingActivityRegressionChecks.run(directory: directory, source: first)
             // Seed only the isolated preview library for native-screen visual checks.
             restored.saveCollection(name: "诗词与散文")
             restored.saveCollection(name: "睡前阅读")
             restored.setCollections(Set(restored.collections.map(\.id)), for: book.id)
             let previewMark = ReaderMark(id: UUID(), kind: .highlight, locatorJSON: "{}", chapter: "第一章 月光", excerpt: "春江潮水连海平，海上明月共潮生。", note: "适合睡前慢慢读的一段。", color: .yellow, createdAt: Date())
             try restored.saveReaderMark(previewMark, for: book.id)
+            if !ProcessInfo.processInfo.arguments.contains("--preview-activity-empty") {
+                let token = UUID()
+                restored.activity.activateSession(token)
+                let calendar = ReadingActivityCalendar.current
+                let today = calendar.startOfDay(for: Date())
+                for offset in 0..<7 {
+                    let start = calendar.date(byAdding: .day, value: -offset, to: today)!.addingTimeInterval(3600)
+                    let reading = Double([12, 18, 8, 25, 15, 0, 10][offset] * 60)
+                    let listening = Double([9, 0, 12, 5, 0, 0, 8][offset] * 60)
+                    restored.activity.record(.init(start: start, end: start.addingTimeInterval(reading), kind: .reading), bookID: book.id, sessionID: token)
+                    restored.activity.record(.init(start: start.addingTimeInterval(reading), end: start.addingTimeInterval(reading + listening), kind: .listening), bookID: book.id, sessionID: token)
+                }
+                restored.activity.endSession(token)
+            }
+            if ProcessInfo.processInfo.arguments.contains("--preview-dedup") {
+                let duplicates = await restored.importBooks(from: [first, second])
+                restored.delete(report.imported[1])
+                let recovered = await restored.importBooks(from: [second])
+                dedupReport = .init(imported: [], failures: [], restored: recovered.restored, skipped: duplicates.skipped, cancelledFileCount: 2)
+            }
             if ProcessInfo.processInfo.arguments.contains("--preview-deleted") { restored.delete(report.imported[1]) }
             results.append("PASS")
             importReport = report
@@ -118,7 +151,7 @@ struct LibraryRegressionProbe: View {
             results.append("ERROR: \(error)")
             message = results.joined(separator: "\n")
         }
-        try? results.joined(separator: "\n").write(to: URL.documentsDirectory.appendingPathComponent("library-results.txt"), atomically: true, encoding: .utf8)
+        try? results.joined(separator: "\n").write(to: resultsURL, atomically: true, encoding: .utf8)
     }
 
     private func require(_ condition: @autoclosure () -> Bool, _ name: String) throws {

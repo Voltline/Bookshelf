@@ -19,6 +19,7 @@ struct FullTextRegressionProbe: View {
     }
 
     private func run() async {
+        try? "RUNNING".write(to: URL.documentsDirectory.appendingPathComponent("fulltext-results.txt"), atomically: true, encoding: .utf8)
         var report: [String] = []
         let library = LibraryStore(directory: URL.cachesDirectory.appendingPathComponent("BookshelfFullTextRegression", isDirectory: true))
         let source = URL.documentsDirectory.appendingPathComponent("fulltext-probe-\(UUID().uuidString).txt")

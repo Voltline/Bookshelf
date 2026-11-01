@@ -15,9 +15,13 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     @Published private(set) var position = 1
     @Published private(set) var totalPositions = 0
     @Published var progression = 0.0
-    @Published var isLoading = true
+    @Published var isLoading = true {
+        didSet { if oldValue != isLoading { updateActivity(interaction: !isLoading) } }
+    }
     @Published private(set) var isNavigatorReady = false
-    @Published var isSpeaking = false
+    @Published var isSpeaking = false {
+        didSet { if oldValue != isSpeaking { updateActivity(interaction: !isSpeaking) } }
+    }
     @Published var controlsVisible = true
     @Published var errorMessage: String?
     @Published private(set) var sleepTimerEnd: Date?
@@ -38,10 +42,13 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     private var sleepTimerTask: Task<Void, Never>?
     private var speechStartTask: Task<Void, Never>?
     private var appliedPreferences: EPUBPreferences?
+    private let activitySession: ReadingActivitySession
+    private var activityState = ReadingActivityState()
 
     init(book: Book, store: LibraryStore, initialSearchLocator: Locator? = nil) {
         self.book = book
         self.store = store
+        activitySession = ReadingActivitySession(bookID: book.id, store: store.activity)
         requestedInitialLocation = initialSearchLocator
         readerMarks = store.readerMarks(for: book.id)
     }
@@ -80,6 +87,7 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
             let verticalScrollAdapter = VerticalScrollNavigationAdapter(navigator: navigator)
             verticalScrollAdapter.bind()
             navigator.addObserver(.activate { [weak self] _ in
+                self?.noteReadingInteraction()
                 self?.controlsVisible.toggle()
                 return true
             })
@@ -290,9 +298,35 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     func saveProgress() { store.flushPendingChanges() }
 
     func close() {
+        setReadingVisible(false, foreground: false)
         cancelSleepTimer()
         stopSpeech()
         saveProgress()
+    }
+
+    func setReadingVisible(_ visible: Bool, foreground: Bool) {
+        activityState.visible = visible
+        activityState.foreground = foreground
+        updateActivity(interaction: visible)
+    }
+
+    func setReadingForeground(_ foreground: Bool) {
+        activityState.foreground = foreground
+        updateActivity(interaction: foreground)
+        store.activity.flush()
+    }
+
+    func setReadingOverlay(_ presented: Bool) {
+        activityState.overlay = presented
+        updateActivity(interaction: !presented)
+    }
+
+    private func noteReadingInteraction() { updateActivity(interaction: true) }
+
+    private func updateActivity(interaction: Bool = false) {
+        activityState.ready = isNavigatorReady && !isLoading
+        activityState.speaking = isSpeaking
+        activitySession.update(activityState, interaction: interaction)
     }
 
     private func makePreferences(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme, font: ReadingFont) -> EPUBPreferences {
@@ -599,11 +633,14 @@ extension ReadiumReaderModel: EPUBNavigatorDelegate {
     }
 
     func navigator(_ navigator: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
+        let changed = isNavigatorReady != (viewport != nil)
         isNavigatorReady = viewport != nil
+        if changed { updateActivity(interaction: viewport != nil) }
         if viewport != nil { applySearchHighlight() }
     }
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+        noteReadingInteraction()
         updateReadingProgress(from: locator)
 
         guard
@@ -640,6 +677,7 @@ extension ReadiumReaderModel: PublicationSpeechSynthesizerDelegate {
                 return
             }
             isSpeaking = true
+            activitySession.pulse()
             locationWhenSpeechPaused = nil
             updateSpeechHighlight(utterance.locator)
             if let range { followSpokenWord(range) }

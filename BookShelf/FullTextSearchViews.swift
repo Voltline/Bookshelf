@@ -84,141 +84,122 @@ struct BookFullTextSearchView: View {
 
 struct LibraryFullTextSearchView: View {
     @ObservedObject var library: LibraryStore
+    @StateObject private var model: LibrarySearchModel
     @State private var query = ""
-    @State private var searchedTerm = ""
-    @State private var groups: [LibrarySearchGroup] = []
-    @State private var failedBooks: [Book] = []
-    @State private var currentBookTitle = ""
-    @State private var completedCount = 0
-    @State private var totalCount = 0
-    @State private var hasSearched = false
-    @State private var isSearching = false
-    @State private var searchTask: Task<Void, Never>?
-    @State private var wasInterrupted = false
-    @State private var libraryChanged = false
+    @State private var scope: LibrarySearchScope = .all
+    @State private var visibleCounts: [UUID: Int] = [:]
+
+    init(library: LibraryStore) {
+        self.library = library
+        _model = StateObject(wrappedValue: LibrarySearchModel(library: library))
+    }
+
+    private var scopedIDs: [UUID] { scope.books(in: library.books).map(\.id) }
+    private var scopeName: String { scope.name(collections: library.collections) }
 
     var body: some View {
         NavigationStack {
             List {
-                if isSearching {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ProgressView(value: Double(completedCount), total: Double(max(1, totalCount)))
-                        Text("正在搜索 \(completedCount + 1)/\(totalCount)：\(currentBookTitle)")
-                            .font(.footnote).foregroundStyle(.secondary)
+                Section {
+                    Picker(selection: $scope) {
+                        Text("全部书籍").tag(LibrarySearchScope.all)
+                        Text("收藏").tag(LibrarySearchScope.favorites)
+                        Text("正在读").tag(LibrarySearchScope.reading)
+                        ForEach(library.collections) { collection in
+                            Text(collection.name).tag(LibrarySearchScope.collection(collection.id))
+                        }
+                    } label: { Label("搜索范围", systemImage: "line.3.horizontal.decrease") }
+                    LabeledContent("范围内书籍", value: "\(scopedIDs.count) 本")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                if model.hasSearched {
+                    Section {
+                        if model.isSearching {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ProgressView(value: Double(model.completedCount), total: Double(max(1, model.totalCount)))
+                                Text("正在搜索 \(min(model.completedCount + 1, model.totalCount))/\(model.totalCount)：\(model.currentBookTitle)")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                            Button("停止搜索", systemImage: "stop.circle") { model.stop() }
+                        }
+                        Label("\(model.groups.count) 本书 · \(model.matchCount) 处匹配", systemImage: "text.magnifyingglass")
+                            .font(.subheadline)
+                        if model.wasStopped {
+                            Text("搜索已停止，保留已完成书籍的结果。重新搜索可从头查找。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if model.libraryChanged {
+                            Text("书库已更新，重新搜索可获取最新结果。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if model.reachedResultLimit {
+                            Text("已达到本次结果上限，请缩小搜索范围或使用更具体的词语。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if !model.isSearching {
+                            Button("重新搜索", systemImage: "arrow.clockwise", action: performSearch)
+                                .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || scopedIDs.isEmpty)
+                        }
                     }
                 }
-                if wasInterrupted {
-                    Text("搜索已暂停，重新输入关键词并搜索可继续。")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                if libraryChanged {
-                    Text("书库已更新，重新搜索可获取最新结果。")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                ForEach(groups) { group in
+                ForEach(model.groups) { group in
                     Section {
-                        ForEach(group.matches) { match in
+                        ForEach(group.matches.prefix(visibleCounts[group.id] ?? 20)) { match in
                             NavigationLink {
                                 ReaderView(book: group.book, library: library, initialSearchLocator: match.locator)
                             } label: {
                                 FullTextMatchRow(match: match)
                             }
                         }
+                        let count = min(visibleCounts[group.id] ?? 20, group.matches.count)
+                        if count < group.matches.count {
+                            Button("显示更多（已显示 \(count)/\(group.matches.count)）") { visibleCounts[group.id] = count + 20 }
+                        }
                     } header: {
                         Text("\(group.book.title) · \(group.matches.count) 处")
                     } footer: {
                         if group.wasTruncated {
-                            Text("本书仅显示前 \(group.matches.count) 处，可在书内继续搜索。")
+                            Text("本书仅收录前 \(group.matches.count) 处匹配，更多结果可在书内继续搜索。")
                         }
                     }
                 }
-                if !failedBooks.isEmpty {
+                if !model.failedBooks.isEmpty {
                     Section("未能搜索的书籍") {
-                        ForEach(failedBooks) { book in Text(book.title).foregroundStyle(.secondary) }
+                        ForEach(model.failedBooks) { book in Text(book.title).foregroundStyle(.secondary) }
                     }
                 }
-            }
-            .overlay {
-                if !hasSearched {
-                    ContentUnavailableView("搜索已导入书籍", systemImage: "books.vertical", description: Text("在书架中所有书籍的正文里查找词语，包括已导入的 TXT。"))
-                } else if !isSearching && groups.isEmpty && failedBooks.isEmpty {
-                    ContentUnavailableView.search(text: searchedTerm)
+                if !model.hasSearched {
+                    ContentUnavailableView(scopedIDs.isEmpty ? "这个范围还没有书籍" : "搜索书籍正文", systemImage: "text.magnifyingglass", description: Text(scopedIDs.isEmpty ? "选择其他范围，或先把书籍加入书单 / 收藏。" : "在“\(scopeName)”中查找词语，支持 EPUB 与 TXT。"))
+                        .listRowBackground(Color.clear)
+                } else if !model.isSearching && model.groups.isEmpty && model.failedBooks.isEmpty && !model.wasStopped && !model.libraryChanged {
+                    ContentUnavailableView.search(text: model.searchedTerm).listRowBackground(Color.clear)
                 }
             }
             .navigationTitle("全文搜索")
             .navigationBarTitleDisplayMode(.large)
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索所有书籍正文")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索书籍正文")
             .onSubmit(of: .search) { performSearch() }
         }
-        .onDisappear {
-            if isSearching {
-                searchTask?.cancel()
-                isSearching = false
-                wasInterrupted = true
-            }
+        .onDisappear { model.stop() }
+        .onChange(of: scope) { _, _ in model.resetForScope(); visibleCounts = [:] }
+        .onChange(of: scopedIDs) { _, _ in model.reconcileLibrary(scope: scope) }
+        .onChange(of: library.collections) { _, collections in
+            if case .collection(let id) = scope, !collections.contains(where: { $0.id == id }) { scope = .all }
         }
-        .onChange(of: library.books.map(\.id)) { _, ids in
-            // In-flight searches hold a snapshot of the old library. Do not let
-            // their late results reintroduce deleted books into the list.
-            searchTask?.cancel()
-            isSearching = false
-            let activeIDs = Set(ids)
-            groups.removeAll { !activeIDs.contains($0.book.id) }
-            failedBooks.removeAll { !activeIDs.contains($0.id) }
-            libraryChanged = hasSearched
-            wasInterrupted = false
+        .task {
+            #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--preview-library-search"), !model.hasSearched {
+                query = "春江"
+                performSearch()
+            }
+            #endif
         }
     }
 
     private func performSearch() {
-        searchTask?.cancel()
-        let term = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(100))
-        searchedTerm = term
-        groups = []
-        failedBooks = []
-        wasInterrupted = false
-        libraryChanged = false
-        completedCount = 0
-        let books = library.books
-        totalCount = books.count
-        hasSearched = !term.isEmpty
-        guard !term.isEmpty, !books.isEmpty else {
-            isSearching = false
-            return
-        }
-        isSearching = true
-        searchTask = Task {
-            for book in books {
-                guard !Task.isCancelled else { return }
-                currentBookTitle = book.title
-                do {
-                    let publication = try await library.publication(for: book)
-                    var matches: [BookSearchMatch] = []
-                    let truncated = try await FullTextSearch.search(publication: publication, query: term, limit: 200) { batch in
-                        matches.append(contentsOf: batch)
-                    }
-                    guard !Task.isCancelled else { return }
-                    if !matches.isEmpty {
-                        groups.append(LibrarySearchGroup(book: book, matches: matches, wasTruncated: truncated))
-                    }
-                } catch is CancellationError {
-                    return
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    failedBooks.append(book)
-                }
-                completedCount += 1
-            }
-            isSearching = false
-        }
+        visibleCounts = [:]
+        model.search(query, scope: scope)
     }
-}
-
-private struct LibrarySearchGroup: Identifiable {
-    let book: Book
-    let matches: [BookSearchMatch]
-    let wasTruncated: Bool
-    var id: UUID { book.id }
 }
 
 private struct FullTextMatchRow: View {

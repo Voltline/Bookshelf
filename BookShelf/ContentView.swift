@@ -23,6 +23,7 @@ struct ContentView: View {
     @State private var showCollections = false
     @State private var showDeleted = false
     @State private var showAnnotationExport = false
+    @State private var showReadingActivity = false
     @State private var filter: ShelfFilter = .all
     @AppStorage("library.layout") private var layoutRaw = ShelfLayout.list.rawValue
     @AppStorage("library.sort") private var sortRaw = ShelfSort.recent.rawValue
@@ -74,7 +75,7 @@ struct ContentView: View {
             }
             Task {
                 let report = await library.importBooks(from: urls)
-                if urls.count > 1 || !report.failures.isEmpty { importReport = report }
+                if urls.count > 1 || !report.failures.isEmpty || !report.skipped.isEmpty || !report.restored.isEmpty || report.cancelledFileCount > 0 { importReport = report }
             }
         }
         .sheet(isPresented: $isSettingsPresented) { AppSettingsView() }
@@ -91,6 +92,12 @@ struct ContentView: View {
         .sheet(item: $membershipBook) { BookCollectionsView(book: $0, library: library) }
         .sheet(isPresented: $showDeleted) { RecentlyDeletedView(library: library) }
         .sheet(isPresented: $showAnnotationExport) { AnnotationExportView(library: library) }
+        .sheet(isPresented: $showReadingActivity) {
+            ReadingActivityView(library: library) { book in
+                showReadingActivity = false
+                open(book)
+            }
+        }
         .onChange(of: library.collections) { _, collections in
             if let selectedCollectionID, !collections.contains(where: { $0.id == selectedCollectionID }) { self.selectedCollectionID = nil }
         }
@@ -204,6 +211,10 @@ struct ContentView: View {
                         }
                     }
                 }
+                if searchText.isEmpty, filter == .all, selectedCollectionID == nil {
+                    ReadingGoalSummary(activity: library.activity) { showReadingActivity = true }
+                        .padding(.top, 24)
+                }
             }
             .frame(maxWidth: layout == .grid ? 900 : 700)
             .frame(maxWidth: .infinity)
@@ -225,6 +236,7 @@ struct ContentView: View {
             Divider()
             collectionPicker
             Button("管理书单", systemImage: "folder") { showCollections = true }
+            Button("阅读记录与目标", systemImage: "chart.bar.xaxis") { showReadingActivity = true }
             Button("导出划线与笔记", systemImage: "square.and.arrow.up") { showAnnotationExport = true }
             Button("最近删除（\(library.deletedBooks.count)）", systemImage: "trash") { showDeleted = true }
         } label: { Label("书架管理", systemImage: layout.symbol) }
@@ -286,7 +298,13 @@ struct ContentView: View {
                     ProgressView(value: Double(progress.completed), total: Double(max(1, progress.total)))
                     Text("正在导入 \(progress.completed + 1)/\(progress.total)").font(.headline)
                     Text(progress.fileName).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Text(library.importCancellationRequested ? "正在完成当前文件…" : (progress.stage == .checking ? "正在检查是否重复…" : "正在解析书籍…"))
+                        .font(.caption).foregroundStyle(.secondary)
                 } else { ProgressView("正在准备导入…") }
+                Button("停止后续导入", role: .cancel) { library.cancelImport() }
+                    .disabled(library.importCancellationRequested)
+                Text("停止后会保留已导入的书籍。")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             .frame(width: 240)
             .padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))

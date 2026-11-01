@@ -72,6 +72,10 @@ struct BookDetailView: View {
                         .disabled(library.readerMarks(for: book.id).isEmpty)
                 }
 
+                Section("阅读记录") {
+                    BookActivitySummary(activity: library.activity, bookID: book.id)
+                }
+
                 Section("文件") {
                     LabeledContent("格式", value: currentBook.sourceFormat ?? "EPUB")
                     if let size = library.fileSize(for: currentBook) {
@@ -112,11 +116,31 @@ struct BookImportReportView: View {
         NavigationStack {
             List {
                 Section {
-                    Label("成功导入 \(report.imported.count) 本", systemImage: "checkmark.circle")
+                    if !report.imported.isEmpty { Label("成功导入 \(report.imported.count) 本", systemImage: "checkmark.circle") }
+                    if !report.restored.isEmpty { Label("恢复 \(report.restored.count) 本", systemImage: "arrow.uturn.backward.circle") }
+                    if !report.skipped.isEmpty { Label("跳过 \(report.skipped.count) 个重复文件", systemImage: "doc.on.doc") }
+                    if report.cancelledFileCount > 0 { Label("已停止，\(report.cancelledFileCount) 个文件未处理", systemImage: "stop.circle") }
                     if !report.failures.isEmpty {
                         Label("\(report.failures.count) 个文件未导入", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
                     }
+                }
+                if !report.restored.isEmpty {
+                    Section {
+                        ForEach(report.restored) { book in
+                            Label(book.title, systemImage: "arrow.uturn.backward")
+                        }
+                    } header: { Text("已从最近删除恢复") } footer: { Text("相同文件不重复入库，原有阅读进度、书单和笔记均已保留。") }
+                }
+                if !report.skipped.isEmpty {
+                    Section {
+                        ForEach(report.skipped) { item in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.fileName).font(.subheadline.weight(.medium))
+                                Text("书架中已有《\(item.book.title)》") .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    } header: { Text("已跳过重复文件") } footer: { Text("按文件内容识别，不会因为书名相同就跳过不同版本。") }
                 }
                 if !report.imported.isEmpty {
                     Section("已添加到书架") {

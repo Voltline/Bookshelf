@@ -14,6 +14,7 @@ struct Book: Identifiable, Codable, Hashable {
     var sourceFormat: String?
     var collectionIDs: [UUID] = []
     var deletedAt: Date?
+    var sourceFingerprint: String?
 
     var hasStartedReading: Bool { lastOpenedAt != nil || locator.locatorJSON != nil || locator.page > 0 }
     var progressLabel: String {
@@ -25,7 +26,7 @@ struct Book: Identifiable, Codable, Hashable {
 extension Book {
     private enum CodingKeys: String, CodingKey {
         case id, title, author, fileName, coverFileName, importedAt, locator
-        case isFavorite, isFinished, lastOpenedAt, sourceFormat, collectionIDs, deletedAt
+        case isFavorite, isFinished, lastOpenedAt, sourceFormat, collectionIDs, deletedAt, sourceFingerprint
     }
 
     init(from decoder: Decoder) throws {
@@ -43,6 +44,7 @@ extension Book {
         sourceFormat = try values.decodeIfPresent(String.self, forKey: .sourceFormat)
         collectionIDs = try values.decodeIfPresent([UUID].self, forKey: .collectionIDs) ?? []
         deletedAt = try values.decodeIfPresent(Date.self, forKey: .deletedAt)
+        sourceFingerprint = try values.decodeIfPresent(String.self, forKey: .sourceFingerprint)
     }
 }
 

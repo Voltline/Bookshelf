@@ -42,6 +42,9 @@ struct ReaderView: View {
     private var readingTheme: ReadingTheme { ReadingTheme(rawValue: theme) ?? .paper }
     private var readingMode: ReadingMode { ReadingMode(rawValue: mode) ?? .page }
     private var readingFont: ReadingFont { ReadingFont(rawValue: font) ?? .publisher }
+    private var readingOverlayPresented: Bool {
+        showChapters || showSettings || showSearch || editingMark != nil || (model.errorMessage != nil && !model.isLoading)
+    }
 
     private func applyReadingPreferences() {
         model.applyPreferences(
@@ -133,6 +136,7 @@ struct ReaderView: View {
         }
         .statusBarHidden(!model.controlsVisible)
         .animation(.easeInOut(duration: 0.18), value: model.controlsVisible)
+        .onAppear { model.setReadingVisible(true, foreground: scenePhase == .active) }
         .task {
             if !ReaderFonts.available.contains(readingFont) {
                 font = (ReaderFonts.available.contains(.serif) ? ReadingFont.serif : .sansSerif).rawValue
@@ -153,9 +157,11 @@ struct ReaderView: View {
         }
         .onDisappear { model.close() }
         .onChange(of: scenePhase) { _, phase in
+            model.setReadingForeground(phase == .active)
             model.saveProgress()
             if phase == .active { model.checkSleepTimer() }
         }
+        .onChange(of: readingOverlayPresented) { _, presented in model.setReadingOverlay(presented) }
         .onChange(of: font) { _, _ in applyReadingPreferences() }
         .sheet(isPresented: $showChapters) { chapterSheet }
         .sheet(item: $editingMark) { mark in

@@ -13,7 +13,7 @@ struct FontRegressionProbe: View {
             var results: [String] = []
             var samples: [String: [Int]] = [:]
             do {
-                let library = LibraryStore()
+                let library = LibraryStore(directory: URL.cachesDirectory.appendingPathComponent("BookshelfFontRegression", isDirectory: true))
                 guard let book = await library.importBook(from: .documentsDirectory.appendingPathComponent("font-test.epub")) else {
                     throw NSError(domain: library.errorMessage ?? "import", code: 1)
                 }
