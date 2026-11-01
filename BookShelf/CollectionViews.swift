@@ -8,7 +8,10 @@ struct CollectionsView: View {
     @State private var pendingDeletion: BookCollection?
 
     var body: some View {
-        NavigationStack {
+        let counts = library.books.reduce(into: [UUID: Int]()) { counts, book in
+            for id in Set(book.collectionIDs) { counts[id, default: 0] += 1 }
+        }
+        return NavigationStack {
             List {
                 ForEach(library.collections) { collection in
                     Button {
@@ -19,7 +22,7 @@ struct CollectionsView: View {
                             Label(collection.name, systemImage: "folder")
                                 .foregroundStyle(.primary)
                             Spacer()
-                            Text("\(library.books.filter { $0.collectionIDs.contains(collection.id) }.count) 本")
+                            Text("\(counts[collection.id, default: 0]) 本")
                                 .foregroundStyle(.secondary).font(.subheadline)
                         }
                     }

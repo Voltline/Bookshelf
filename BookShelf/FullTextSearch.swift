@@ -1,4 +1,5 @@
 import Foundation
+import os
 import ReadiumShared
 
 struct BookSearchMatch: Identifiable {
@@ -19,6 +20,8 @@ enum FullTextSearch {
         limit: Int,
         onBatch: ([BookSearchMatch]) -> Void
     ) async throws -> Bool {
+        let trace = PerformanceTrace.signposter.beginInterval("FullTextSearch", id: PerformanceTrace.signposter.makeSignpostID())
+        defer { PerformanceTrace.signposter.endInterval("FullTextSearch", trace) }
         guard publication.isSearchable else { throw SearchFailure.notSearchable }
         let iterator = try await publication.search(query: query).get()
         var delivered = 0

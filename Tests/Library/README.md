@@ -80,3 +80,8 @@ xcrun simctl launch DEVICE_ID com.Voltline.BookShelf --library-regression
 16. 朗读时只增长听书，暂停后不再增长听书；锁屏和切后台的真实音频时长仍需真机验证，长时间没有回调不会追补。
 17. 目标关闭不删记录，取消目标编辑不保存；统计 7 / 30 天切换、单本累计、从记录回到书籍的位置均正确。
 18. 删除 / 恢复书籍不丢统计；永久删除后总时长保留但不再出现书籍名称；清空记录必须二次确认。
+
+性能检测见 `Docs/PERFORMANCE.md`。Debug 模拟器可用 `--performance-regression`，
+输出 `performance-results.txt`，覆盖 1000 本书 / 1000 条标注 / 12000 条统计、
+共享封面缓存与下采样、大 TXT 主线程心跳、重复 TTS 回调、旧快照隔离及真实
+15 秒自动统计保存。检测使用唯一 QA 缓存目录；须等本次最终 PASS，通常约 20 秒。

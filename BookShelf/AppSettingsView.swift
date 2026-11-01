@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AppSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SpeechSettingKeys.language) private var languageCode = "zh-CN"
     @AppStorage(SpeechSettingKeys.voiceIdentifier) private var voiceIdentifier = ""
     @AppStorage(SpeechSettingKeys.rate) private var rate = 0.5
@@ -13,15 +14,15 @@ struct AppSettingsView: View {
     @AppStorage(SpeechSettingKeys.autoPageTurnEnabled) private var autoPageTurnEnabled = true
     @State private var previewSynthesizer = AVSpeechSynthesizer()
 
-    private var voices: [AVSpeechSynthesisVoice] {
-        AVSpeechSynthesisVoice.speechVoices().sorted {
+    @State private var voices: [AVSpeechSynthesisVoice] = []
+    @State private var languages: [String] = []
+
+    private func refreshVoices() {
+        voices = AVSpeechSynthesisVoice.speechVoices().sorted {
             if $0.language == $1.language { return $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             return localizedLanguage($0.language).localizedStandardCompare(localizedLanguage($1.language)) == .orderedAscending
         }
-    }
-
-    private var languages: [String] {
-        Array(Set(voices.map(\.language))).sorted {
+        languages = Array(Set(voices.map(\.language))).sorted {
             localizedLanguage($0).localizedStandardCompare(localizedLanguage($1)) == .orderedAscending
         }
     }
@@ -90,6 +91,9 @@ struct AppSettingsView: View {
             .onChange(of: languageCode) { _, _ in
                 if selectedVoice?.language != languageCode { voiceIdentifier = "" }
             }
+            .onAppear { refreshVoices() }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { refreshVoices() } }
+            .onDisappear { previewSynthesizer.stopSpeaking(at: .immediate) }
         }
     }
 

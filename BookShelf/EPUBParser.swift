@@ -142,7 +142,10 @@ final class EPUBParser {
 
         let title = publication.metadata.title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let authors = publication.metadata.authors.map(\.name).filter { !$0.isEmpty }.joined(separator: "、")
-        let cover = try? await publication.cover().get()?.pngData()
+        // Covers are thumbnails in this app; avoid decoding/re-encoding a
+        // multi-megapixel original on the UI actor during every import.
+        let image = try? await publication.coverFitting(maxSize: CGSize(width: 600, height: 600)).get()
+        let cover = await Self.encodeCover(image ?? nil)
         guard !publication.readingOrder.isEmpty else { throw EPUBError.emptyBook }
 
         return EPUBMetadata(
@@ -150,5 +153,10 @@ final class EPUBParser {
             author: authors.isEmpty ? "未知作者" : authors,
             cover: cover ?? nil
         )
+    }
+
+    @concurrent
+    nonisolated private static func encodeCover(_ image: UIImage?) async -> Data? {
+        image?.pngData()
     }
 }

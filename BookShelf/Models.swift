@@ -1,6 +1,6 @@
 import Foundation
 
-struct Book: Identifiable, Codable, Hashable {
+nonisolated struct Book: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var title: String
     var author: String
@@ -29,7 +29,7 @@ extension Book {
         case isFavorite, isFinished, lastOpenedAt, sourceFormat, collectionIDs, deletedAt, sourceFingerprint
     }
 
-    init(from decoder: Decoder) throws {
+    nonisolated init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decode(UUID.self, forKey: .id)
         title = try values.decode(String.self, forKey: .title)
@@ -48,19 +48,19 @@ extension Book {
     }
 }
 
-struct BookCollection: Identifiable, Codable, Hashable {
+nonisolated struct BookCollection: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var name: String
     let createdAt: Date
 }
 
-struct LibrarySnapshot: Codable {
+nonisolated struct LibrarySnapshot: Codable, Sendable {
     var version = 1
     var books: [Book]
     var collections: [BookCollection]
 }
 
-struct ReaderLocator: Codable, Hashable {
+nonisolated struct ReaderLocator: Codable, Hashable, Sendable {
     var page: Int = 0
     var totalPages: Int = 0
     var locatorJSON: String?

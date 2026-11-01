@@ -1,7 +1,8 @@
 import Combine
 import Foundation
+import os
 
-enum ReadingActivityKind: String, Codable { case reading, listening }
+nonisolated enum ReadingActivityKind: String, Codable, Sendable { case reading, listening }
 
 struct ReadingActivityInterval {
     let start: Date
@@ -9,7 +10,7 @@ struct ReadingActivityInterval {
     let kind: ReadingActivityKind
 }
 
-struct ReadingActivityRecord: Codable, Identifiable {
+nonisolated struct ReadingActivityRecord: Codable, Identifiable, Sendable {
     let day: String
     var bookID: UUID?
     var readingSeconds: Double = 0
@@ -19,7 +20,7 @@ struct ReadingActivityRecord: Codable, Identifiable {
     var total: Double { readingSeconds + listeningSeconds }
 }
 
-struct ReadingActivitySnapshot: Codable {
+nonisolated struct ReadingActivitySnapshot: Codable, Sendable {
     var version = 1
     var goalMinutes = 20
     var records: [ReadingActivityRecord] = []
@@ -46,7 +47,12 @@ struct ReadingActivityTotals {
 
 @MainActor
 final class ReadingActivityStore: ObservableObject {
-    @Published private(set) var records: [ReadingActivityRecord] = []
+    private var storedRecords: [ReadingActivityRecord] = []
+    var records: [ReadingActivityRecord] { storedRecords }
+    private var recordIndices: [String: Int] = [:]
+    private var dailyTotals: [String: ReadingActivityTotals] = [:]
+    private var bookTotals: [UUID: ReadingActivityTotals] = [:]
+    private var allTotals = ReadingActivityTotals()
     @Published private(set) var goalMinutes = 20
     @Published private(set) var persistenceError: String?
     private let url: URL
@@ -54,6 +60,8 @@ final class ReadingActivityStore: ObservableObject {
     private var loadFailed = false
     private var saveTask: Task<Void, Never>?
     private var activeSession: UUID?
+    private var revision = 0
+    private var persistenceGeneration = 0
     var isAvailable: Bool { !loadFailed }
 
     init(directory: URL) {
@@ -63,9 +71,11 @@ final class ReadingActivityStore: ObservableObject {
             let snapshot = try JSONDecoder().decode(ReadingActivitySnapshot.self, from: Data(contentsOf: url))
             guard snapshot.version == 1, (0...240).contains(snapshot.goalMinutes),
                   Set(snapshot.records.map(\.id)).count == snapshot.records.count,
-                  snapshot.records.allSatisfy({ $0.readingSeconds.isFinite && $0.listeningSeconds.isFinite && $0.readingSeconds >= 0 && $0.listeningSeconds >= 0 && $0.total <= 172_800 && Self.validDay($0.day) })
+                  Set(snapshot.records.map(\.day)).allSatisfy(Self.validDay),
+                  snapshot.records.allSatisfy({ $0.readingSeconds.isFinite && $0.listeningSeconds.isFinite && $0.readingSeconds >= 0 && $0.listeningSeconds >= 0 && $0.total <= 172_800 })
             else { throw CocoaError(.fileReadCorruptFile) }
-            records = snapshot.records
+            storedRecords = snapshot.records
+            rebuildSummaries()
             goalMinutes = snapshot.goalMinutes
         } catch {
             loadFailed = true
@@ -89,7 +99,7 @@ final class ReadingActivityStore: ObservableObject {
         guard activeSession == sessionID, !loadFailed else { return }
         let duration = interval.end.timeIntervalSince(interval.start)
         guard duration.isFinite, duration > 0, duration <= 172_800 else { return }
-        var updated = records
+        objectWillChange.send()
         var cursor = interval.start
         while cursor < interval.end {
             let day = calendar.startOfDay(for: cursor)
@@ -97,33 +107,52 @@ final class ReadingActivityStore: ObservableObject {
             let end = min(next, interval.end)
             let key = ReadingActivityCalendar.key(cursor, calendar: calendar)
             let index: Int
-            if let existing = updated.firstIndex(where: { $0.day == key && $0.bookID == bookID }) { index = existing }
-            else { updated.append(.init(day: key, bookID: bookID, lastActivityAt: end)); index = updated.count - 1 }
+            let recordKey = key + ":" + bookID.uuidString
+            if let existing = recordIndices[recordKey] { index = existing }
+            else {
+                index = storedRecords.count
+                storedRecords.append(.init(day: key, bookID: bookID, lastActivityAt: end))
+                recordIndices[recordKey] = index
+            }
             let seconds = end.timeIntervalSince(cursor)
-            if interval.kind == .reading { updated[index].readingSeconds += seconds }
-            else { updated[index].listeningSeconds += seconds }
-            updated[index].lastActivityAt = max(updated[index].lastActivityAt, end)
+            if interval.kind == .reading {
+                storedRecords[index].readingSeconds += seconds
+                dailyTotals[key, default: .init()].reading += seconds
+                bookTotals[bookID, default: .init()].reading += seconds
+                allTotals.reading += seconds
+            } else {
+                storedRecords[index].listeningSeconds += seconds
+                dailyTotals[key, default: .init()].listening += seconds
+                bookTotals[bookID, default: .init()].listening += seconds
+                allTotals.listening += seconds
+            }
+            storedRecords[index].lastActivityAt = max(storedRecords[index].lastActivityAt, end)
             cursor = end
         }
-        records = updated
         dirty = true
+        revision += 1
         // A fixed checkpoint, not a debounce that can be postponed forever.
         if saveTask == nil {
             saveTask = Task { [weak self] in
                 do { try await Task.sleep(for: .seconds(15)) } catch { return }
-                self?.flush()
+                await self?.checkpoint()
             }
         }
     }
 
     func totals(day: String? = nil, bookID: UUID? = nil) -> ReadingActivityTotals {
-        records.lazy.filter { (day == nil || $0.day == day) && (bookID == nil || $0.bookID == bookID) }
-            .reduce(into: ReadingActivityTotals()) { $0.reading += $1.readingSeconds; $0.listening += $1.listeningSeconds }
+        if let day, let bookID {
+            guard let index = recordIndices[day + ":" + bookID.uuidString] else { return .init() }
+            let record = storedRecords[index]
+            return .init(reading: record.readingSeconds, listening: record.listeningSeconds)
+        }
+        if let day { return dailyTotals[day] ?? .init() }
+        if let bookID { return bookTotals[bookID] ?? .init() }
+        return allTotals
     }
 
     func streak(now: Date, calendar: Calendar = ReadingActivityCalendar.current) -> Int {
-        let totals = Dictionary(grouping: records, by: \.day).mapValues { $0.reduce(0) { $0 + $1.total } }
-        let days = Set(totals.filter { $0.value >= 60 }.keys)
+        let days = Set(dailyTotals.filter { $0.value.total >= 60 }.keys)
         var day = calendar.startOfDay(for: now)
         if !days.contains(ReadingActivityCalendar.key(day, calendar: calendar)) {
             guard let yesterday = calendar.date(byAdding: .day, value: -1, to: day) else { return 0 }
@@ -162,7 +191,9 @@ final class ReadingActivityStore: ObservableObject {
             }
         }
         try persist(records: updated, goal: goalMinutes)
-        records = updated
+        objectWillChange.send()
+        storedRecords = updated
+        rebuildSummaries()
     }
 
     func flush() {
@@ -172,24 +203,73 @@ final class ReadingActivityStore: ObservableObject {
         catch { persistenceError = "阅读统计暂未保存，将在下次检查点重试：\(error.localizedDescription)" }
     }
 
+    /// Encode a snapshot off the UI actor. New pulses may arrive while encoding;
+    /// an older checkpoint never marks those newer records as already saved.
+    func checkpoint() async {
+        guard dirty, !loadFailed else { return }
+        let savedRevision = revision
+        let savedGeneration = persistenceGeneration
+        do {
+            let data = try await LibrarySnapshotEncoding.activity(.init(goalMinutes: goalMinutes, records: storedRecords))
+            try Task.checkCancellation()
+            guard savedGeneration == persistenceGeneration else { return }
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+            persistenceGeneration += 1
+            if revision == savedRevision { dirty = false }
+            persistenceError = nil
+        } catch is CancellationError { return }
+        catch { persistenceError = "阅读统计暂未保存，将在下次检查点重试：\(error.localizedDescription)" }
+        saveTask = nil
+        if dirty {
+            saveTask = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+                await self?.checkpoint()
+            }
+        }
+    }
+
     @discardableResult
     func reset() -> Bool {
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder().encode(ReadingActivitySnapshot(goalMinutes: goalMinutes, records: [])).write(to: url, options: .atomic)
             saveTask?.cancel(); saveTask = nil; dirty = false; loadFailed = false
-            activeSession = nil; records = []; persistenceError = nil
+            persistenceGeneration += 1
+            objectWillChange.send()
+            activeSession = nil; storedRecords = []; persistenceError = nil
+            rebuildSummaries()
             return true
         } catch { persistenceError = "无法清空阅读记录：\(error.localizedDescription)"; return false }
     }
 
     private func persist(records: [ReadingActivityRecord], goal: Int) throws {
+        let trace = PerformanceTrace.signposter.beginInterval("ActivityPersist", id: PerformanceTrace.signposter.makeSignpostID())
+        defer { PerformanceTrace.signposter.endInterval("ActivityPersist", trace) }
         guard !loadFailed else { throw CocoaError(.fileReadCorruptFile) }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(ReadingActivitySnapshot(goalMinutes: goal, records: records)).write(to: url, options: .atomic)
+        persistenceGeneration += 1
         dirty = false
         saveTask?.cancel(); saveTask = nil
         persistenceError = nil
+    }
+
+    /// Rebuild only after loading or destructive edits. Live pulses update the
+    /// target bucket and aggregates in O(1), without copying the whole history.
+    private func rebuildSummaries() {
+        recordIndices = [:]; dailyTotals = [:]; bookTotals = [:]; allTotals = .init()
+        for (index, record) in storedRecords.enumerated() {
+            recordIndices[record.id] = index
+            dailyTotals[record.day, default: .init()].reading += record.readingSeconds
+            dailyTotals[record.day, default: .init()].listening += record.listeningSeconds
+            if let id = record.bookID {
+                bookTotals[id, default: .init()].reading += record.readingSeconds
+                bookTotals[id, default: .init()].listening += record.listeningSeconds
+            }
+            allTotals.reading += record.readingSeconds
+            allTotals.listening += record.listeningSeconds
+        }
     }
 }
 

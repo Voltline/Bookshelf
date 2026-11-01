@@ -1,6 +1,6 @@
 import Foundation
 
-enum OnlineBookSource: String, CaseIterable, Identifiable {
+nonisolated enum OnlineBookSource: String, CaseIterable, Identifiable, Sendable {
     case all = "全部"
     case douban = "豆瓣读书"
     case zongheng = "纵横小说"
@@ -29,7 +29,7 @@ enum OnlineBookSource: String, CaseIterable, Identifiable {
     }
 }
 
-struct OnlineBookResult: Identifiable {
+nonisolated struct OnlineBookResult: Identifiable, Sendable {
     let id: String
     let title: String
     let detail: String
@@ -43,12 +43,13 @@ struct OnlineBookResult: Identifiable {
     let tags: [String]
 }
 
-struct OnlineSearchOutcome {
+nonisolated struct OnlineSearchOutcome: Sendable {
     let results: [OnlineBookResult]
     let failures: [String]
 }
 
-enum OnlineBookSearch {
+nonisolated enum OnlineBookSearch {
+    @concurrent
     static func search(_ query: String, sources: [OnlineBookSource]) async -> OnlineSearchOutcome {
         async let douban = attempt(.douban, query: query, enabled: sources.contains(.douban))
         async let zongheng = attempt(.zongheng, query: query, enabled: sources.contains(.zongheng))

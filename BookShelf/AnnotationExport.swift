@@ -21,16 +21,17 @@ enum ReaderAnnotationExporter {
         var lines = [markdown ? "# 划线与笔记" : "划线与笔记", "", "导出时间：\(date.formatted(date: .abbreviated, time: .shortened))", ""]
         var bookCount = 0, markCount = 0
         for book in books {
-            let highlights = marks(book.id).filter { $0.kind == .highlight }.sorted { left, right in
-                let l = left.locator?.locations.position ?? Int.max
-                let r = right.locator?.locations.position ?? Int.max
-                if l != r { return l < r }
-                let lp = left.locator?.locations.totalProgression ?? 1
-                let rp = right.locator?.locations.totalProgression ?? 1
-                if lp != rp { return lp < rp }
+            // Decode each locator once, not on every O(n log n) comparison.
+            let highlights = marks(book.id).filter { $0.kind == .highlight }.map { mark in
+                let location = mark.locator?.locations
+                return (mark: mark, position: location?.position ?? Int.max, progress: location?.totalProgression ?? 1)
+            }.sorted { left, right in
+                if left.position != right.position { return left.position < right.position }
+                if left.progress != right.progress { return left.progress < right.progress }
+                let left = left.mark, right = right.mark
                 if left.createdAt != right.createdAt { return left.createdAt < right.createdAt }
                 return left.id.uuidString < right.id.uuidString
-            }
+            }.map(\.mark)
             guard !highlights.isEmpty else { continue }
             bookCount += 1; markCount += highlights.count
             lines += [markdown ? "## \(escape(book.title))" : "《\(book.title)》", "", "作者：\(markdown ? escape(book.author) : book.author)", ""]

@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import Foundation
+import os
 @preconcurrency import ReadiumNavigator
 import ReadiumShared
 import UIKit
@@ -34,6 +35,8 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
     private var verticalScrollNavigationAdapter: VerticalScrollNavigationAdapter?
     private var speechSettings = SpeechSettings()
     private var positionCountsByReadingOrder: [Int] = []
+    private var positionOffsetsByReadingOrder: [Int] = []
+    private var readingOrderIndices: [String: Int] = [:]
     private var highlightedUtterance: Locator?
     private var activeSearchResult: Locator?
     private var locationWhenSpeechPaused: Locator?
@@ -55,6 +58,8 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
 
     func load(fontSize: Double, lineSpacing: Double, mode: ReadingMode, theme: ReadingTheme, font: ReadingFont, speechSettings: SpeechSettings) async {
         guard navigator == nil else { return }
+        let trace = PerformanceTrace.signposter.beginInterval("ReaderLoad", id: PerformanceTrace.signposter.makeSignpostID())
+        defer { PerformanceTrace.signposter.endInterval("ReaderLoad", trace) }
         isLoading = true
         self.speechSettings = speechSettings
         do {
@@ -101,6 +106,14 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
             verticalScrollNavigationAdapter = verticalScrollAdapter
             tableOfContents = flatten((try? await publication.tableOfContents().get()) ?? [])
             positionCountsByReadingOrder = ((try? await publication.positionsByReadingOrder().get()) ?? []).map(\.count)
+            var offset = 0
+            positionOffsetsByReadingOrder = positionCountsByReadingOrder.map { count in
+                defer { offset += count }
+                return offset
+            }
+            readingOrderIndices = Dictionary(publication.readingOrder.enumerated().map {
+                ($0.element.url().removingFragment().normalized.string, $0.offset)
+            }, uniquingKeysWith: { first, _ in first })
             totalPositions = positionCountsByReadingOrder.reduce(0, +)
             if let location = navigator.currentLocation ?? initialLocation {
                 updateReadingProgress(from: location)
@@ -405,10 +418,11 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
         if
             totalPositions > 0,
             let publication,
-            let resourceIndex = publication.readingOrder.firstIndex(where: { $0.url().isEquivalentTo(locator.href) }),
+            let resourceIndex = readingOrderIndices[locator.href.removingFragment().normalized.string]
+                ?? publication.readingOrder.firstIndex(where: { $0.url().isEquivalentTo(locator.href) }),
             positionCountsByReadingOrder.indices.contains(resourceIndex)
         {
-            let positionsBeforeResource = positionCountsByReadingOrder[..<resourceIndex].reduce(0, +)
+            let positionsBeforeResource = positionOffsetsByReadingOrder[resourceIndex]
             let positionsInResource = positionCountsByReadingOrder[resourceIndex]
 
             if positionsInResource > 0 {
@@ -431,8 +445,8 @@ final class ReadiumReaderModel: NSObject, ObservableObject {
             resolvedPosition = max(1, resolvedPosition ?? 1)
         }
 
-        progression = resolvedProgress
-        position = resolvedPosition ?? 1
+        if progression != resolvedProgress { progression = resolvedProgress }
+        if position != (resolvedPosition ?? 1) { position = resolvedPosition ?? 1 }
 
         if persist {
             store.updateLocation(
@@ -634,7 +648,7 @@ extension ReadiumReaderModel: EPUBNavigatorDelegate {
 
     func navigator(_ navigator: any ViewportObservingNavigator, viewportDidChange viewport: NavigatorViewport?) {
         let changed = isNavigatorReady != (viewport != nil)
-        isNavigatorReady = viewport != nil
+        if changed { isNavigatorReady = viewport != nil }
         if changed { updateActivity(interaction: viewport != nil) }
         if viewport != nil { applySearchHighlight() }
     }
@@ -664,11 +678,11 @@ extension ReadiumReaderModel: PublicationSpeechSynthesizerDelegate {
     func publicationSpeechSynthesizer(_ synthesizer: PublicationSpeechSynthesizer, stateDidChange state: PublicationSpeechSynthesizer.State) {
         switch state {
         case .stopped:
-            isSpeaking = false
+            if isSpeaking { isSpeaking = false }
             locationWhenSpeechPaused = nil
             updateSpeechHighlight(nil)
         case let .paused(utterance):
-            isSpeaking = false
+            if isSpeaking { isSpeaking = false }
             locationWhenSpeechPaused = navigator?.currentLocation ?? utterance.locator
             updateSpeechHighlight(utterance.locator)
         case let .playing(utterance, range):
@@ -676,7 +690,7 @@ extension ReadiumReaderModel: PublicationSpeechSynthesizerDelegate {
                 checkSleepTimer()
                 return
             }
-            isSpeaking = true
+            if !isSpeaking { isSpeaking = true }
             activitySession.pulse()
             locationWhenSpeechPaused = nil
             updateSpeechHighlight(utterance.locator)
@@ -685,7 +699,7 @@ extension ReadiumReaderModel: PublicationSpeechSynthesizerDelegate {
     }
 
     func publicationSpeechSynthesizer(_ synthesizer: PublicationSpeechSynthesizer, utterance: PublicationSpeechSynthesizer.Utterance, didFailWithError error: PublicationSpeechSynthesizer.Error) {
-        isSpeaking = false
+        if isSpeaking { isSpeaking = false }
         errorMessage = "语音朗读失败：\(error)"
     }
 }

@@ -130,20 +130,18 @@ struct ReadingActivityView: View {
     private func chartDays(now: Date) -> [ActivityChartDay] {
         let calendar = ReadingActivityCalendar.current
         let today = calendar.startOfDay(for: now)
-        let byDay = Dictionary(grouping: activity.records, by: \.day).mapValues { records in
-            records.reduce(into: ReadingActivityTotals()) { $0.reading += $1.readingSeconds; $0.listening += $1.listeningSeconds }
-        }
         return (0..<period).reversed().compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
-            let total = byDay[ReadingActivityCalendar.key(date, calendar: calendar)] ?? .init()
+            let total = activity.totals(day: ReadingActivityCalendar.key(date, calendar: calendar))
             return .init(date: date, reading: total.reading, listening: total.listening)
         }
     }
 
     private func recentBooks(days: Set<String>) -> [ActivityRecentBook] {
         let grouped = Dictionary(grouping: activity.records.filter { days.contains($0.day) && $0.bookID != nil }, by: \.bookID)
+        let booksByID = Dictionary((library.books + library.deletedBooks).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return grouped.compactMap { id, records in
-            guard let id, let book = (library.books + library.deletedBooks).first(where: { $0.id == id }), let latest = records.map(\.lastActivityAt).max() else { return nil }
+            guard let id, let book = booksByID[id], let latest = records.map(\.lastActivityAt).max() else { return nil }
             return ActivityRecentBook(book: book, total: records.reduce(0) { $0 + $1.total }, latest: latest)
         }.sorted { $0.latest == $1.latest ? $0.id.uuidString < $1.id.uuidString : $0.latest > $1.latest }
     }

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftUI
 import Combine
 import ReadiumShared
@@ -86,6 +87,8 @@ final class LibraryStore: ObservableObject {
     }
 
     private func importOne(from sourceURL: URL) async throws -> ImportOutcome {
+        let trace = PerformanceTrace.signposter.beginInterval("BookImport", id: PerformanceTrace.signposter.makeSignpostID())
+        defer { PerformanceTrace.signposter.endInterval("BookImport", trace) }
         let accessed = sourceURL.startAccessingSecurityScopedResource()
         defer { if accessed { sourceURL.stopAccessingSecurityScopedResource() } }
         let format = sourceURL.pathExtension.lowercased()
@@ -109,7 +112,7 @@ final class LibraryStore: ObservableObject {
             try ensureDirectories()
             switch sourceURL.pathExtension.lowercased() {
             case "epub":
-                try fileManager.copyItem(at: sourceURL, to: destination)
+                try await BookImportIO.copy(from: sourceURL, to: destination)
             case "txt":
                 try await TXTImporter.convert(
                     sourceURL,
@@ -123,7 +126,7 @@ final class LibraryStore: ObservableObject {
             var coverName: String?
             if let cover = document.cover {
                 let name = "\(id.uuidString).cover"
-                try cover.write(to: coverDestination, options: .atomic)
+                try await BookImportIO.write(cover, to: coverDestination)
                 coverName = name
             }
             var title = document.title
@@ -186,7 +189,8 @@ final class LibraryStore: ObservableObject {
     func coverURL(for book: Book) -> URL? {
         guard let name = book.coverFileName else { return nil }
         let url = coversDirectory.appendingPathComponent(name)
-        return fileManager.fileExists(atPath: url.path) ? url : nil
+        // A missing cover is handled asynchronously by the shared image loader.
+        return url
     }
 
     func updateProgress(bookID: UUID, page: Int, total: Int) {
@@ -254,7 +258,7 @@ final class LibraryStore: ObservableObject {
         indexSaveTask = Task { [weak self] in
             do { try await Task.sleep(for: .milliseconds(750)) }
             catch { return }
-            self?.saveIndex()
+            await self?.saveIndexCheckpoint()
         }
     }
 
@@ -471,6 +475,8 @@ final class LibraryStore: ObservableObject {
     }
 
     private func saveMarks(_ marks: [String: [ReaderMark]]) throws {
+        let trace = PerformanceTrace.signposter.beginInterval("MarksPersist", id: PerformanceTrace.signposter.makeSignpostID())
+        defer { PerformanceTrace.signposter.endInterval("MarksPersist", trace) }
         guard !marksLoadFailed else { throw CocoaError(.fileReadCorruptFile) }
         try ensureDirectories()
         try encoder.encode(marks).write(to: marksURL, options: .atomic)
@@ -480,7 +486,22 @@ final class LibraryStore: ObservableObject {
         catch { errorMessage = "无法保存书架：\(error.localizedDescription)" }
     }
 
+    private func saveIndexCheckpoint() async {
+        guard !indexLoadFailed else { return }
+        do {
+            let snapshot = LibrarySnapshot(books: books + deletedBooks, collections: collections)
+            let data = try await LibrarySnapshotEncoding.library(snapshot)
+            try Task.checkCancellation()
+            try ensureDirectories()
+            try data.write(to: indexURL, options: .atomic)
+            indexSaveTask = nil
+        } catch is CancellationError { return }
+        catch { errorMessage = "无法保存书架：\(error.localizedDescription)" }
+    }
+
     private func writeIndex(_ books: [Book], deletedBooks: [Book]? = nil, collections: [BookCollection]? = nil) throws {
+        let trace = PerformanceTrace.signposter.beginInterval("LibraryPersist", id: PerformanceTrace.signposter.makeSignpostID())
+        defer { PerformanceTrace.signposter.endInterval("LibraryPersist", trace) }
         guard !indexLoadFailed else { throw CocoaError(.fileReadCorruptFile) }
         try ensureDirectories()
         let snapshot = LibrarySnapshot(books: books + (deletedBooks ?? self.deletedBooks), collections: collections ?? self.collections)

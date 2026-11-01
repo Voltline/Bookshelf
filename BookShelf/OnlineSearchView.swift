@@ -123,6 +123,7 @@ struct OnlineSearchView: View {
 }
 
 struct OnlineBookCover: View {
+    @Environment(\.displayScale) private var displayScale
     let url: URL?
     let source: OnlineBookSource
     let width: CGFloat
@@ -151,21 +152,11 @@ struct OnlineBookCover: View {
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: 6))
-        .task(id: url) {
+        .task(id: url.map { CoverImageRequest(url: $0, maxPixelSize: Int(max(width, height) * displayScale)) }) {
             image = nil
             guard let url else { return }
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 15
-            if source == .douban {
-                request.setValue("https://book.douban.com/", forHTTPHeaderField: "Referer")
-            }
-            guard let (data, response) = try? await URLSession.shared.data(for: request),
-                  let response = response as? HTTPURLResponse,
-                  response.statusCode == 200,
-                  response.mimeType?.hasPrefix("image/") == true,
-                  data.count < 5_000_000,
-                  let decoded = UIImage(data: data),
-                  !Task.isCancelled else { return }
+            let request = CoverImageRequest(url: url, maxPixelSize: Int(max(width, height) * displayScale), referer: source == .douban ? "https://book.douban.com/" : nil)
+            guard let decoded = await CoverImagePipeline.shared.image(for: request), !Task.isCancelled else { return }
             image = decoded
         }
         .accessibilityHidden(true)

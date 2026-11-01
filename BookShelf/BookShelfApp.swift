@@ -15,7 +15,9 @@ struct BookShelfApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG && targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("--activity-live-regression") {
+            if ProcessInfo.processInfo.arguments.contains("--performance-regression") {
+                PerformanceRegressionProbe()
+            } else if ProcessInfo.processInfo.arguments.contains("--activity-live-regression") {
                 ReadingActivityLiveProbe()
             } else if ProcessInfo.processInfo.arguments.contains("--library-regression") {
                 LibraryRegressionProbe()

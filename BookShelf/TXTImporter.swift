@@ -1,5 +1,6 @@
 import CoreFoundation
 import Foundation
+import os
 import ReadiumZIPFoundation
 
 enum TXTImportError: LocalizedError {
@@ -25,7 +26,10 @@ nonisolated enum TXTImporter {
         let paragraphs: [String]
     }
 
+    @concurrent
     static func convert(_ sourceURL: URL, to destinationURL: URL, title: String) async throws {
+        let trace = PerformanceTrace.signposter.beginInterval("TXTConvert", id: PerformanceTrace.signposter.makeSignpostID())
+        defer { PerformanceTrace.signposter.endInterval("TXTConvert", trace) }
         let data = try Data(contentsOf: sourceURL)
         let text = try decode(data)
         let sections = try makeSections(from: text)
@@ -52,6 +56,7 @@ nonisolated enum TXTImporter {
 
         let chapterFiles = sections.indices.map { String(format: "chapter-%04d.xhtml", $0 + 1) }
         for (index, section) in sections.enumerated() {
+            try Task.checkCancellation()
             let heading = section.startsChapter && section.title != "正文"
                 ? "<h1 class=\"chapter-title\">\(escapeXML(section.title))</h1>"
                 : ""
@@ -105,6 +110,7 @@ nonisolated enum TXTImporter {
         let entries = ["META-INF/container.xml", "OEBPS/content.opf", "OEBPS/nav.xhtml", "OEBPS/styles.css"]
             + chapterFiles.map { "OEBPS/\($0)" }
         for entry in entries {
+            try Task.checkCancellation()
             try await archive.addEntry(with: entry, relativeTo: workDirectory, compressionMethod: .deflate)
         }
     }
@@ -184,9 +190,14 @@ nonisolated enum TXTImporter {
         return sections
     }
 
+    private static let chapterExpression = try! NSRegularExpression(
+        pattern: #"^(?:第[零〇一二三四五六七八九十百千万两0-9０-９]+[章节回卷篇集部](?:[\s:：、.．-]+.{0,50})?|序章|序言|楔子|引子|尾声|后记|番外(?:[\s:：、.．-]+.{0,50})?|Chapter\s+\d+(?:[\s:：.-]+.{0,50})?)$"#,
+        options: .caseInsensitive
+    )
+
     private static func isChapterHeading(_ line: String) -> Bool {
-        guard line.count <= 80 else { return false }
-        return line.range(of: #"^(?:第[零〇一二三四五六七八九十百千万两0-9０-９]+[章节回卷篇集部](?:[\s:：、.．-]+.{0,50})?|序章|序言|楔子|引子|尾声|后记|番外(?:[\s:：、.．-]+.{0,50})?|Chapter\s+\d+(?:[\s:：.-]+.{0,50})?)$"#, options: [.regularExpression, .caseInsensitive]) != nil
+        guard line.prefix(81).count <= 80 else { return false }
+        return chapterExpression.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
     }
 
     private static func escapeXML(_ text: String) -> String {

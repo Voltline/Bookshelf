@@ -1,7 +1,7 @@
 import Foundation
 import SwiftSoup
 
-struct OnlineBookFact: Identifiable {
+nonisolated struct OnlineBookFact: Identifiable, Sendable {
     let label: String
     let value: String
 
@@ -13,7 +13,7 @@ struct OnlineBookFact: Identifiable {
     }
 }
 
-struct OnlineBookDetails {
+nonisolated struct OnlineBookDetails: Sendable {
     let author: String?
     let rating: String?
     let ratingCount: Int?
@@ -36,7 +36,8 @@ struct OnlineBookDetails {
     }
 }
 
-enum OnlineBookDetailService {
+nonisolated enum OnlineBookDetailService {
+    @concurrent
     static func fetch(for result: OnlineBookResult) async throws -> OnlineBookDetails {
         switch result.source {
         case .douban:

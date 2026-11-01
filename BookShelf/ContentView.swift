@@ -1,6 +1,5 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import ImageIO
 
 extension UTType {
     static let epub = UTType(filenameExtension: "epub") ?? .data
@@ -44,7 +43,7 @@ struct ContentView: View {
     }
 
     private var continueReadingBook: Book? {
-        if let recent = library.books.filter({ !$0.isFinished && $0.lastOpenedAt != nil })
+        if let recent = library.books.lazy.filter({ !$0.isFinished && $0.lastOpenedAt != nil })
             .max(by: { ($0.lastOpenedAt ?? .distantPast) < ($1.lastOpenedAt ?? .distantPast) }) {
             return recent
         }
@@ -133,7 +132,9 @@ struct ContentView: View {
     }
 
     private var bookList: some View {
-        ScrollView {
+        let visibleBooks = filteredBooks
+        let lastBookID = visibleBooks.last?.id
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if searchText.isEmpty, filter == .all, selectedCollectionID == nil, let book = continueReadingBook {
                     Text("继续阅读")
@@ -162,18 +163,18 @@ struct ContentView: View {
                     }
                     .accessibilityLabel("筛选书架：\(filter.name)")
                     Spacer()
-                    Text("\(filteredBooks.count) 本")
+                    Text("\(visibleBooks.count) 本")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 10)
 
-                if filteredBooks.isEmpty {
+                if visibleBooks.isEmpty {
                     noMatchingBooks
                         .padding(.vertical, 40)
                 } else if layout == .grid {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 132, maximum: 190), spacing: 20)], alignment: .leading, spacing: 24) {
-                        ForEach(filteredBooks) { book in
+                        ForEach(visibleBooks) { book in
                             Button { open(book) } label: {
                                 ShelfBookGridItem(book: book, coverURL: library.coverURL(for: book))
                             }
@@ -193,7 +194,7 @@ struct ContentView: View {
                     }
                     .padding(.top, 8)
                 } else {
-                    ForEach(filteredBooks) { book in
+                    ForEach(visibleBooks) { book in
                         HStack(spacing: 8) {
                             Button { open(book) } label: {
                                 ShelfBookRow(book: book, coverURL: library.coverURL(for: book))
@@ -206,7 +207,7 @@ struct ContentView: View {
                             }
                             .accessibilityLabel("管理《\(book.title)》")
                         }
-                        if book.id != filteredBooks.last?.id {
+                        if book.id != lastBookID {
                             Divider().padding(.leading, 70)
                         }
                     }
@@ -318,7 +319,7 @@ private struct ContinueReadingCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            BookCover(title: book.title, url: coverURL)
+            BookCover(title: book.title, url: coverURL, maxPixelSize: 320)
                 .frame(width: 70, height: 102)
                 .clipShape(.rect(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 6) {
@@ -380,7 +381,7 @@ private struct ShelfBookRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            BookCover(title: book.title, url: coverURL, showsTitle: false)
+            BookCover(title: book.title, url: coverURL, showsTitle: false, maxPixelSize: 240)
                 .frame(width: 56, height: 78)
                 .clipShape(.rect(cornerRadius: 5))
             VStack(alignment: .leading, spacing: 6) {
@@ -406,6 +407,7 @@ struct BookCover: View {
     let title: String
     let url: URL?
     var showsTitle = true
+    var maxPixelSize = 600
     @State private var image: Image?
 
     var body: some View {
@@ -429,18 +431,10 @@ struct BookCover: View {
                 }
             }
         }
-        .task(id: url) {
+        .task(id: url.map { CoverImageRequest(url: $0, maxPixelSize: maxPixelSize) }) {
             image = nil
             guard let url else { return }
-            let uiImage = await Task.detached(priority: .utility) {
-                guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                      let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                        kCGImageSourceCreateThumbnailFromImageAlways: true,
-                        kCGImageSourceThumbnailMaxPixelSize: 600,
-                        kCGImageSourceCreateThumbnailWithTransform: true,
-                      ] as CFDictionary) else { return UIImage?.none }
-                return UIImage(cgImage: thumbnail)
-            }.value
+            let uiImage = await CoverImagePipeline.shared.image(for: .init(url: url, maxPixelSize: maxPixelSize))
             guard !Task.isCancelled, let uiImage else { return }
             image = Image(uiImage: uiImage)
         }
